@@ -27,7 +27,60 @@ st.set_page_config(page_title="DataKeeper — 접근 제어 엔진 데모", page
 MODE_BADGES = {0: "✅", 1: "🧠", 2: "🔍", 3: "🎭", 4: "🚫"}
 MODE_COLORS = {0: "#d3f1e0", 1: "#e6dcf7", 2: "#fff3bf", 3: "#fde2cd", 4: "#f1f3f4"}
 MODE_TEXT = {0: "#0b6e4f", 1: "#5b3fa8", 2: "#8a6d00", 3: "#a4540a", 4: "#5f6368"}
+MODE_ACTIONS = {
+    0: "원문 전체 표시",
+    1: "직접 열람 불가 · AI 추론 근거",
+    2: "일반화 요약만 표시",
+    3: "엔티티 마스킹본 표시",
+    4: "접근 차단",
+}
 LEVEL_COLORS = {0: "#2a9d8f", 1: "#6c9a3f", 2: "#e9a03b", 3: "#d1495b", 4: "#7b2d43"}
+
+st.markdown(
+    """
+    <style>
+      .block-container { padding-top: 2rem; }
+      .dk-mode-strip {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(130px, 1fr));
+        gap: 8px;
+        margin: 10px 0 18px;
+      }
+      .dk-mode-item {
+        border-radius: 8px;
+        padding: 8px 10px;
+        min-height: 58px;
+        border: 1px solid rgba(0,0,0,0.06);
+      }
+      .dk-mode-name { font-weight: 800; font-size: 0.84rem; margin-bottom: 3px; }
+      .dk-mode-action { font-size: 0.76rem; line-height: 1.25; }
+      .dk-section-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        margin-bottom: 4px;
+      }
+      .dk-reason {
+        color: #667085;
+        font-size: 0.82rem;
+        line-height: 1.35;
+        margin-bottom: 10px;
+      }
+      .dk-muted-panel {
+        color: #6b7280;
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 10px 12px;
+      }
+      @media (max-width: 900px) {
+        .dk-mode-strip { grid-template-columns: 1fr; }
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 @st.cache_data
@@ -63,6 +116,18 @@ def mode_badge(d: Decision) -> str:
     )
 
 
+def render_mode_legend() -> None:
+    items = []
+    for mode in range(5):
+        items.append(
+            f'<div class="dk-mode-item" style="background:{MODE_COLORS[mode]};color:{MODE_TEXT[mode]}">'
+            f'<div class="dk-mode-name">{MODE_BADGES[mode]} {MODE_NAMES[mode]}</div>'
+            f'<div class="dk-mode-action">{MODE_ACTIONS[mode]}</div>'
+            "</div>"
+        )
+    st.markdown('<div class="dk-mode-strip">' + "".join(items) + "</div>", unsafe_allow_html=True)
+
+
 def masked_html(section: dict) -> str:
     """A3: 엔티티를 하이라이트된 플레이스홀더로 치환한 본문 HTML."""
     text = section["text"]
@@ -78,20 +143,27 @@ def render_section(section: dict, d: Decision) -> None:
     """CONCEPT.md 6.1절 렌더링 규칙의 구현."""
     with st.container(border=True):
         st.markdown(
-            f'{level_badge(d.security_level)} &nbsp; **{section["title"]}** &nbsp; {mode_badge(d)}',
+            '<div class="dk-section-meta">'
+            f'{level_badge(d.security_level)}'
+            f'{mode_badge(d)}'
+            f'<b>{esc(section["title"])}</b>'
+            "</div>",
             unsafe_allow_html=True,
         )
-        st.caption(f"gap={d.gap} · " + " / ".join(d.reasons))
+        st.markdown(
+            f'<div class="dk-reason">gap={d.gap} · {" / ".join(esc(reason) for reason in d.reasons)}</div>',
+            unsafe_allow_html=True,
+        )
 
         if d.mode == 4:
             st.markdown(
-                '<div style="color:#9aa0a6;padding:6px 0">🔒 접근 차단 — 이 섹션은 현재 사용자에게 제공되지 않습니다.</div>',
+                '<div class="dk-muted-panel">접근 차단: 이 섹션은 현재 사용자에게 제공되지 않습니다.</div>',
                 unsafe_allow_html=True,
             )
         elif d.mode == 1:
             st.markdown(
                 '<div style="color:#5b3fa8;font-size:0.85rem;margin-bottom:4px">'
-                "🧠 AI 추론 근거로만 사용 가능 — 직접 열람 불가 (Phase 2 질의응답에서 판단·집계에만 활용)</div>"
+                "AI 추론 근거로만 사용 가능 — 직접 열람 불가 (Phase 2 질의응답에서 판단·집계에만 활용)</div>"
                 f'<div style="filter:blur(5px);user-select:none;pointer-events:none;line-height:1.7">{esc(section["text"])}</div>',
                 unsafe_allow_html=True,
             )
@@ -160,23 +232,25 @@ def tab_viewer(sections, policy, persona, purpose):
     log_view(persona, doc_title, decisions)
 
     st.markdown(f"### {doc_title}")
-    st.caption(
-        f"현재 사용자: **{persona['name']}** (C{persona['clearance']}"
-        + (f", {persona['department']}" if persona.get("department") else ", 외부 채널")
-        + ") — 사이드바에서 페르소나를 바꾸면 아래 렌더링이 실시간으로 바뀝니다."
+    st.caption("A0이 전체 접근이고 A4가 접근 차단입니다. 사이드바에서 페르소나를 바꾸면 같은 문서의 노출 방식이 즉시 달라집니다.")
+    render_mode_legend()
+
+    counts = dict(_mode_counts(decisions))
+    metric_cols = st.columns(5)
+    for mode, col in enumerate(metric_cols):
+        col.metric(f"A{mode}", counts.get(mode, 0), MODE_ACTIONS[mode])
+
+    st.markdown(
+        f"**현재 사용자**: {persona['name']} · C{persona['clearance']} · "
+        f"{persona.get('department') or '외부 채널'} · 목적: {'판단/집계' if purpose == 'judgment' else '정보 조회'}"
     )
     for s, d in zip(by_doc[doc], decisions):
         render_section(s, d)
 
 
 def tab_matrix(sections, personas, policy, purpose):
-    st.caption("섹션 × 페르소나 전체 판정을 한 화면에. 색이 곧 접근 모드입니다.")
-    legend = " &nbsp; ".join(
-        f'<span style="background:{MODE_COLORS[m]};color:{MODE_TEXT[m]};border-radius:8px;'
-        f'padding:2px 10px;font-size:0.8rem;font-weight:600">A{m} {MODE_NAMES[m].split(maxsplit=1)[1]}</span>'
-        for m in range(5)
-    )
-    st.markdown(legend, unsafe_allow_html=True)
+    st.caption("섹션 × 페르소나 전체 판정을 한 화면에 표시합니다. A0은 전체 접근, A4는 접근 차단입니다.")
+    render_mode_legend()
 
     rows = []
     for s in sections:
@@ -196,7 +270,7 @@ def tab_matrix(sections, personas, policy, purpose):
 
     styler = df.style
     styler = styler.map(color, subset=persona_cols) if hasattr(styler, "map") else styler.applymap(color, subset=persona_cols)
-    st.dataframe(styler, use_container_width=True, hide_index=True, height=min(38 * len(df) + 40, 900))
+    st.dataframe(styler, width="stretch", hide_index=True, height=min(38 * len(df) + 40, 900))
 
 
 def tab_ingest(sections):
@@ -215,7 +289,7 @@ def tab_ingest(sections):
             "엔티티": len(s.get("entities", [])),
             "A2 일반화 요약": s.get("summary_generalized", ""),
         })
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
     sid = st.selectbox("엔티티 상세 보기", [s["id"] for s in sections if s.get("entities")])
     sec = next(s for s in sections if s["id"] == sid)
@@ -224,7 +298,7 @@ def tab_ingest(sections):
 
 def tab_audit():
     if st.session_state.get("audit"):
-        st.dataframe(pd.DataFrame(st.session_state["audit"]), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(st.session_state["audit"]), width="stretch", hide_index=True)
     else:
         st.info("아직 열람 기록이 없습니다. 문서 뷰어에서 문서를 열어보세요.")
 
@@ -251,7 +325,7 @@ def tab_chat(sections, policy, persona, purpose):
 
 
 def main():
-    st.title("🔐 DataKeeper — 접근 제어 엔진 데모")
+    st.title("DataKeeper — 접근 제어 엔진 데모")
     st.caption(
         "All Data, Safe for Everyone — 데이터 보안 등급(D) × 사용자 접근 등급(C) × 상황 → "
         "섹션 단위 5단계 접근 모드(A) 판정. 같은 문서가 보는 사람에 따라 다르게 렌더링됩니다."
@@ -277,7 +351,11 @@ def main():
         )
         st.divider()
         n_docs = len({s["doc"] for s in sections})
-        st.caption(f"코퍼스: 문서 {n_docs}개 / 섹션 {len(sections)}개\n\n분류는 수집 시 1회 — 뷰어·매트릭스는 API 호출 없이 동작합니다.")
+        st.caption(
+            f"코퍼스: 문서 {n_docs}개 / 섹션 {len(sections)}개\n\n"
+            "현재 스펙: A0 전체 접근 → A4 접근 차단\n\n"
+            "분류는 수집 시 1회 — 뷰어·매트릭스는 API 호출 없이 동작합니다."
+        )
 
     purpose = "judgment" if judgment else "info"
 

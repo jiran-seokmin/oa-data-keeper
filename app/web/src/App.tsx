@@ -264,8 +264,8 @@ export function App() {
   const navItems: { id: View; label: string }[] = [
     { id: "grid", label: "판정 그리드" },
     { id: "viewer", label: "문서 뷰어" },
-    { id: "chat", label: "채팅" },
     { id: "matrix", label: "매트릭스" },
+    { id: "chat", label: "채팅" },
   ];
 
   return (

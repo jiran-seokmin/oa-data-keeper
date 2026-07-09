@@ -1,5 +1,5 @@
 import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FileText, Info, Lock, Send, Sparkles } from "lucide-react";
+import { ArrowUp, FileText, Info, Lock, Sparkles } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 /* ── 타입 ─────────────────────────────────────────────── */
@@ -470,37 +470,87 @@ function ChatView({ persona, chat, loading, input, onInput, onSend, onSuggest }:
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [chat, loading]);
+  const isEmpty = chat.length === 0 && !loading;
   const botAvatar = (
-    <div style={{ width: 30, height: 30, flex: "none", borderRadius: "50%", background: "#111827", color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center" }}><Sparkles size={14} /></div>
+    <div className="dk-chat-avatar"><Sparkles size={14} /></div>
   );
+  const composer = (placement: "center" | "dock") => (
+    <div className={`dk-chat-composer ${placement}`}>
+      <textarea
+        value={input}
+        onChange={(e) => onInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            onSend();
+          }
+        }}
+        rows={placement === "center" ? 2 : 1}
+        placeholder="접근 권한을 반영해 질문해보세요"
+        className="dk-chat-input"
+      />
+      <div className="dk-chat-toolbar">
+        <span className="dk-chat-scope-chip"><Lock size={13} /> 현재 페르소나 C{persona?.clearance ?? "-"}</span>
+        <span className="dk-chat-scope-chip"><Info size={13} /> 근거 섹션 표시</span>
+        <span style={{ flex: 1 }} />
+        <button onClick={onSend} disabled={loading || !input.trim()} className="dk-chat-send" aria-label="보내기">
+          <ArrowUp size={16} />
+        </button>
+      </div>
+    </div>
+  );
+
+  if (isEmpty) {
+    return (
+      <div className="dk-chat-shell empty">
+        <section className="dk-chat-empty">
+          <div className="dk-chat-empty-mark"><Sparkles size={22} /></div>
+          <h2>DataKeeper에 질문하세요</h2>
+          <p>
+            답변은 현재 페르소나 <strong>{persona?.name} (C{persona?.clearance})</strong>의 접근 등급에 맞춰
+            원문, 요약, 마스킹, 차단 상태를 반영합니다.
+          </p>
+          {composer("center")}
+          <div className="dk-chat-suggestions" aria-label="추천 질문">
+            {EXAMPLES.map((q) => (
+              <button key={q} type="button" onClick={() => onSuggest(q)} className="dk-chat-suggestion">
+                <Sparkles size={13} /> {q}
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ maxWidth: 820, margin: "0 auto", height: "100%", display: "flex", flexDirection: "column" }}>
-      <div style={{ flex: "none", display: "flex", gap: 8, alignItems: "center", padding: "2px 2px 12px" }}>
-        <span style={{ display: "inline-flex", gap: 6, alignItems: "center", background: "#FFFFFF", border: "1px solid #E5E7EB", color: "#4B5563", borderRadius: 6, padding: "4px 12px", fontSize: 11.5 }}>
+    <div className="dk-chat-shell">
+      <div className="dk-chat-thread-note">
+        <span>
           <Info size={12} /> 페르소나를 전환하면 같은 질문의 답변이 등급에 맞게 다시 계산됩니다.
         </span>
       </div>
-      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, padding: "4px 2px" }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+      <div ref={scrollRef} className="dk-chat-thread">
+        <div className="dk-chat-row assistant">
           {botAvatar}
-          <div style={{ background: "#FFFFFF", border: "1px solid #E5E7EB", padding: "11px 15px", borderRadius: "4px 12px 12px 12px", fontSize: 13.5, color: "#384252", maxWidth: "76%" }}>
+          <div className="dk-chat-bubble assistant">
             안녕하세요, DataKeeper 지식봇입니다. 아래 추천 질문을 선택하거나 직접 입력해보세요. 답변은 현재 페르소나 <strong style={{ color: "#111827", fontWeight: 600 }}>{persona?.name} (C{persona?.clearance})</strong>의 접근 등급에 맞게 판정됩니다.
           </div>
         </div>
         {chat.map((m) => (
-          <div key={m.id} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "flex-end" }}>
-              <div style={{ background: "#111827", color: "#FFFFFF", padding: "11px 15px", borderRadius: "12px 12px 4px 12px", maxWidth: "70%", fontSize: 13.5 }}>{m.q}</div>
+          <div key={m.id} className="dk-chat-turn">
+            <div className="dk-chat-row user">
+              <div className="dk-chat-bubble user">{m.q}</div>
               {persona && <img src={personaImg(persona.clearance)} alt="" style={{ width: 30, height: 30, borderRadius: "50%", flex: "none" }} />}
             </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <div className="dk-chat-row assistant">
               {botAvatar}
-              <div style={{ maxWidth: "76%", display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ background: "#FFFFFF", border: "1px solid #E5E7EB", padding: "11px 15px", borderRadius: "4px 12px 12px 12px", fontSize: 13.5, color: "#384252" }}>
+              <div className="dk-chat-answer-stack">
+                <div className="dk-chat-bubble assistant">
                   <MarkdownAnswer>{m.answer}</MarkdownAnswer>
                 </div>
                 {m.sources.length > 0 && (
-                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", fontSize: 11, color: "#9CA3AF", paddingLeft: 2 }}>
+                  <div className="dk-chat-sources">
                     근거
                     {m.sources.slice(0, 3).map((s, i) => (
                       <span key={i} style={{ display: "inline-flex", gap: 5, alignItems: "center" }}>
@@ -520,21 +570,14 @@ function ChatView({ persona, chat, loading, input, onInput, onSend, onSuggest }:
             </div>
           </div>
         ))}
-        {loading && <div style={{ display: "flex", gap: 8, alignItems: "center" }}>{botAvatar}<span style={{ fontSize: 12.5, color: "#9CA3AF" }}>답변 판정 중…</span></div>}
+        {loading && <div className="dk-chat-row assistant">{botAvatar}<span style={{ fontSize: 12.5, color: "#9CA3AF" }}>답변 판정 중…</span></div>}
       </div>
-      <div style={{ flex: "none", display: "flex", gap: 6, flexWrap: "wrap", padding: "12px 0 10px" }}>
+      <div className="dk-chat-suggestions dock" aria-label="추천 질문">
         {EXAMPLES.map((q) => (
-          <div key={q} onClick={() => onSuggest(q)} style={{ display: "inline-flex", alignItems: "center", padding: "5px 12px", borderRadius: 6, border: "1px solid #D1D5DB", background: "#FFFFFF", color: "#111827", fontSize: 12.5, fontWeight: 500, cursor: "pointer" }}>{q}</div>
+          <button key={q} type="button" onClick={() => onSuggest(q)} className="dk-chat-suggestion">{q}</button>
         ))}
       </div>
-      <div style={{ flex: "none", display: "flex", gap: 8, alignItems: "center" }}>
-        <input value={input} onChange={(e) => onInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") onSend(); }} placeholder="질문을 입력해보세요"
-          style={{ flex: 1, height: 40, borderRadius: 8, border: "1px solid #D1D5DB", background: "#FFFFFF", padding: "0 14px", fontSize: 13.5, color: "#111827", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
-        <button onClick={onSend} disabled={loading}
-          style={{ height: 40, padding: "0 18px", flex: "none", borderRadius: 8, background: "#111827", color: "#FFFFFF", border: "none", cursor: loading ? "default" : "pointer", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, opacity: loading ? 0.6 : 1 }}>
-          <Send size={14} /> 보내기
-        </button>
-      </div>
+      {composer("dock")}
     </div>
   );
 }

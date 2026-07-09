@@ -1,0 +1,5 @@
+# worktrees (각 작업은 .worktrees/<작업명> 아래에서 진행)
+.worktrees/
+
+# OS
+.DS_Store

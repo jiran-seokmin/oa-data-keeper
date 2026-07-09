@@ -224,11 +224,44 @@ def _normalize_label_payload(payload: dict) -> dict:
     return normalized
 
 
+def _low_thinking_config(types, model: str):
+    """분류는 정형 작업이라 깊은 사고가 불필요 — 사고 토큰이 지연의 2/3를 차지한다.
+
+    실측(gemini-3.5-flash, 15문단 배치): 기본 31.9s → low 9.5s, 라벨 15/15 동일 수준.
+    세대별 API가 다르다: gemini-3.x는 thinking_level, 2.5 계열은 thinking_budget.
+    """
+    if re.match(r"gemini-[3-9]", model):
+        return types.ThinkingConfig(thinking_level="low")
+    if "2.5" in model and "pro" not in model:
+        return types.ThinkingConfig(thinking_budget=0)
+    return None
+
+
+def _generate_classification(client, prompt: str, schema):
+    """분류 프롬프트를 저사고 설정으로 호출. 사고 설정 미지원 모델이면 빼고 1회 재시도."""
+    from google.genai import types
+
+    thinking = _low_thinking_config(types, llm_model())
+    config = types.GenerateContentConfig(
+        system_instruction=_classification_system_prompt(),
+        response_mime_type="application/json",
+        response_schema=schema,
+        thinking_config=thinking,
+    )
+    try:
+        return client.models.generate_content(model=llm_model(), contents=prompt, config=config)
+    except Exception as exc:
+        if thinking is not None and "hinking" in str(exc):
+            LOG.warning("[upload] thinking config unsupported for %s — retrying without", llm_model())
+            config.thinking_config = None
+            return client.models.generate_content(model=llm_model(), contents=prompt, config=config)
+        raise
+
+
 def _classify_with_gemini(section: dict, client=None) -> SectionLabel:
     if client is None:
         from google import genai
         client = genai.Client()
-    from google.genai import types
 
     prompt = (
         "다음 섹션을 보안 등급 JSON으로만 분류하세요.\n"
@@ -236,15 +269,7 @@ def _classify_with_gemini(section: dict, client=None) -> SectionLabel:
         "entities는 반드시 객체 배열입니다. 예: [{\"text\":\"한빛전자\",\"type\":\"고객사\"}].\n\n"
         f"문서: {section['doc_title']}\n섹션 제목: {section['title']}\n\n{section['text']}"
     )
-    response = client.models.generate_content(
-        model=llm_model(),
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=_classification_system_prompt(),
-            response_mime_type="application/json",
-            response_schema=SectionLabel,
-        ),
-    )
+    response = _generate_classification(client, prompt, SectionLabel)
     parsed = getattr(response, "parsed", None)
     if isinstance(parsed, SectionLabel):
         return parsed
@@ -317,7 +342,6 @@ def _classify_document_with_gemini(sections: list[dict], client=None) -> dict[st
     if client is None:
         from google import genai
         client = genai.Client()
-    from google.genai import types
 
     blocks = "\n\n".join(
         f'<section id="{s["id"]}" title="{s["title"]}">\n{s["text"]}\n</section>'
@@ -332,15 +356,7 @@ def _classify_document_with_gemini(sections: list[dict], client=None) -> dict[st
         "각 섹션은 문서 전체 맥락을 반영해 판단하되, 등급은 섹션 자체 내용 기준으로 부여하세요.\n\n"
         f"문서: {sections[0]['doc_title']}\n\n{blocks}"
     )
-    response = client.models.generate_content(
-        model=llm_model(),
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=_classification_system_prompt(),
-            response_mime_type="application/json",
-            response_schema=list[BatchSectionLabel],
-        ),
-    )
+    response = _generate_classification(client, prompt, list[BatchSectionLabel])
     parsed = getattr(response, "parsed", None)
     items = parsed if isinstance(parsed, list) else _extract_json_array(getattr(response, "text", "") or "")
     return _batch_items_to_labels(items)

@@ -150,6 +150,64 @@ def _extract_json(text: str) -> dict:
         raise
 
 
+def _normalize_list(value: object) -> list:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        return [value]
+    return []
+
+
+def _infer_entity_type(text: str) -> str:
+    if re.search(r"\d", text) and re.search(r"(억|만|원|퍼센트|%|년|월|일|분기|개월|명|개|건)", text):
+        if re.search(r"(억|만|원)", text):
+            return "금액"
+        if re.search(r"(년|월|일|분기|개월)", text):
+            return "일정"
+        return "수치"
+    if re.search(r"(프로젝트|코드|Project)", text, re.IGNORECASE):
+        return "코드네임"
+    return "민감정보"
+
+
+def _normalize_label_payload(payload: dict) -> dict:
+    """Tolerate common Gemini shape drift while preserving strict DB schema.
+
+    Gemini sometimes returns `entities` as `["DataKeeper", "35퍼센트"]` even
+    when prompted for `{text,type}` objects. Convert those into typed entity
+    dictionaries so the pipeline remains usable and auditable.
+    """
+    normalized = dict(payload)
+    if isinstance(normalized.get("security_level"), str):
+        match = re.search(r"[0-4]", normalized["security_level"])
+        if match:
+            normalized["security_level"] = int(match.group(0))
+    if isinstance(normalized.get("confidence"), str):
+        try:
+            normalized["confidence"] = float(normalized["confidence"])
+        except ValueError:
+            normalized["confidence"] = 0.5
+    normalized["keywords"] = [str(v) for v in _normalize_list(normalized.get("keywords")) if str(v).strip()]
+    normalized["departments"] = [str(v) for v in _normalize_list(normalized.get("departments")) if str(v).strip()]
+
+    entities = []
+    for item in _normalize_list(normalized.get("entities")):
+        if isinstance(item, dict):
+            text = str(item.get("text") or item.get("value") or "").strip()
+            if not text:
+                continue
+            entity_type = str(item.get("type") or item.get("label") or _infer_entity_type(text)).strip()
+            entities.append({"text": text, "type": entity_type or "민감정보"})
+        elif isinstance(item, str):
+            text = item.strip()
+            if text:
+                entities.append({"text": text, "type": _infer_entity_type(text)})
+    normalized["entities"] = entities
+    return normalized
+
+
 def _classify_with_gemini(section: dict, client=None) -> SectionLabel:
     if client is None:
         from google import genai
@@ -158,7 +216,8 @@ def _classify_with_gemini(section: dict, client=None) -> SectionLabel:
 
     prompt = (
         "다음 섹션을 보안 등급 JSON으로만 분류하세요.\n"
-        "JSON keys: security_level, confidence, keywords, departments, summary_generalized, entities.\n\n"
+        "JSON keys: security_level, confidence, keywords, departments, summary_generalized, entities.\n"
+        "entities는 반드시 객체 배열입니다. 예: [{\"text\":\"한빛전자\",\"type\":\"고객사\"}].\n\n"
         f"문서: {section['doc_title']}\n섹션 제목: {section['title']}\n\n{section['text']}"
     )
     response = client.models.generate_content(
@@ -170,7 +229,7 @@ def _classify_with_gemini(section: dict, client=None) -> SectionLabel:
         ),
     )
     payload = _extract_json(getattr(response, "text", "") or "")
-    return SectionLabel.model_validate(payload)
+    return SectionLabel.model_validate(_normalize_label_payload(payload))
 
 
 def classify_and_store(filename: str, content: str, client=None) -> dict:

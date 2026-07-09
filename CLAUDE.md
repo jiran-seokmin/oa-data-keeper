@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 참고 문서 — 계속 참조할 것 (수시 업데이트됨)
 
-- **발표 슬라이드 (기획의 원본, 최우선 기준)**: https://docs.google.com/presentation/d/12m7Axmfq5JvCH3ikzh-Idx35PtxiDr2YtSZKGFxULmY/
+- **발표 슬라이드 (기획의 원본, 최우선 기준)**: https://docs.google.com/presentation/d/12m7Axmfq5JvCH3ikzh-Idx35PtxiDr2YtSZKGFxULmY/edit?usp=sharing
   - 이 슬라이드는 **작업 중에도 계속 보강·수정된다.** 컨셉·범위·데모 시나리오에 관련된 작업을 시작하기 전에 반드시 Google Drive 도구(`read_file_content`, fileId: `12m7Axmfq5JvCH3ikzh-Idx35PtxiDr2YtSZKGFxULmY`)로 최신 내용을 다시 읽을 것. 이전 세션에서 읽은 내용이 최신이라고 가정하지 말 것.
   - 슬라이드와 `docs/CONCEPT.md`가 어긋나면 **슬라이드가 우선**이며, 발견 즉시 CONCEPT.md 갱신을 제안한다.
 - `docs/CONCEPT.md` — 설계 문서 (슬라이드 내용을 구조화한 것. 판정 매트릭스, 아키텍처, Phase 1/2/3 로드맵)

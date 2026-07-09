@@ -1,5 +1,6 @@
 import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Info, Lock, Send, Sparkles } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 
 /* ── 타입 ─────────────────────────────────────────────── */
 type Persona = {
@@ -132,6 +133,14 @@ const AiBadge = ({ text }: { text: string }) => (
     <Sparkles size={12} /> {text}
   </span>
 );
+
+function MarkdownAnswer({ children }: { children: string }) {
+  return (
+    <div className="dk-markdown">
+      <ReactMarkdown>{children}</ReactMarkdown>
+    </div>
+  );
+}
 
 /* ── 앱 ───────────────────────────────────────────────── */
 type View = "grid" | "viewer" | "chat" | "matrix";
@@ -474,7 +483,9 @@ function ChatView({ persona, chat, loading, input, onInput, onSend, onSuggest }:
             <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
               {botAvatar}
               <div style={{ maxWidth: "76%", display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ background: "#FFFFFF", border: "1px solid #E5E7EB", padding: "11px 15px", borderRadius: "4px 12px 12px 12px", fontSize: 13.5, color: "#384252", whiteSpace: "pre-wrap" }}>{m.answer}</div>
+                <div style={{ background: "#FFFFFF", border: "1px solid #E5E7EB", padding: "11px 15px", borderRadius: "4px 12px 12px 12px", fontSize: 13.5, color: "#384252" }}>
+                  <MarkdownAnswer>{m.answer}</MarkdownAnswer>
+                </div>
                 {m.sources.length > 0 && (
                   <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", fontSize: 11, color: "#9CA3AF", paddingLeft: 2 }}>
                     근거

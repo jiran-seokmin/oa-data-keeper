@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DataKeeper — 접근제어 챗</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">🔐</span>
+      <div>
+        <div class="title">DataKeeper</div>
+        <div class="subtitle">접근제어 챗 — 같은 질문, 등급별 다른 조회 결과</div>
+      </div>
+    </div>
+    <div class="controls">
+      <label class="ctl">
+        <span>사용자</span>
+        <select id="persona"></select>
+      </label>
+      <label class="ctl toggle">
+        <input type="checkbox" id="purpose" />
+        <span>판단/집계 목적 <small>(A1 완화)</small></span>
+      </label>
+    </div>
+  </header>
+
+  <main id="messages" class="messages">
+    <div class="hint" id="hint">
+      사용자를 바꿔가며 같은 질문을 던져 보세요. 접근 등급에 따라 원문·요약·마스킹·차단으로 다르게 조회됩니다.<br />
+      예: <em>논의 중인 고객사는 어디인가요</em> · <em>인수 검토 중인 건이 있나요</em> · <em>예상 계약 규모는</em>
+    </div>
+  </main>
+
+  <form id="composer" class="composer">
+    <input id="q" type="text" autocomplete="off" placeholder="질문을 입력하세요…" />
+    <button type="submit">검색</button>
+  </form>
+
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -18,6 +18,11 @@ uv pip install -r requirements.txt --python .venv/bin/python
 
 # 2) 데모 UI — 뷰어·매트릭스는 API 키 없이 완전 동작
 .venv/bin/streamlit run app/ui.py
+
+# 콘솔에서 문서별 접근 결과 확인 (LLM/API 불필요)
+.venv/bin/python -m app.view_access --list-docs
+.venv/bin/python -m app.view_access --doc 01_ai_business_report --clearance 1
+.venv/bin/python -m app.view_access --doc 01_ai_business_report --persona sales_rep --summary
 ```
 
 - **MVP 데모(문서 뷰어, 판정 매트릭스)는 API 호출 없이 결정론적으로 동작**한다.
@@ -49,6 +54,7 @@ app/
   ingest.py      수집: 섹션 분리 → 분류 → sections.json
   pipeline.py    [Phase 2] 질의: 판정 → 모드별 변환 → 생성 → 출력 가드
   ui.py          Streamlit 데모 (문서 뷰어 + 매트릭스 + 수집 결과 + 감사 로그)
+  view_access.py CLI 문서 접근 결과 뷰어 (LLM/API 미사용)
 data/
   seed/          가상 회사 문서 12개 (D0~D4 혼재)
   labels.json    사전 분류 라벨 (데모 재현성용으로 커밋)

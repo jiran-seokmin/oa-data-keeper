@@ -9,5 +9,9 @@
 __pycache__/
 *.pyc
 
+# Frontend
+node_modules/
+*.tsbuildinfo
+
 # DB 산출물 (seed_db.py로 재생성)
 *.db

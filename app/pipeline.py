@@ -1,17 +1,19 @@
 """질의 파이프라인: 판정 → 모드별 변환 → 답변 생성 → 출력 가드.
 
-시드 코퍼스가 작으므로 RAG 없이 A4(접근 차단) 제외 전 섹션을 프롬프트에 삽입한다.
-(실데이터 확장 시 메타데이터 사전 필터가 붙은 벡터 검색으로 대체 — CONCEPT.md 참조)
+Phase E에서는 키워드 검색 결과에 접근제어 렌더링을 먼저 적용한 뒤, 그 결과만
+LLM 프롬프트에 삽입한다. A4 섹션은 검색 결과와 프롬프트 모두에 진입하지 않는다.
 """
 
 from __future__ import annotations
 
-import json
 import os
+import sqlite3
+from dataclasses import asdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.engine import Decision, decide, load_yaml
+from app import store
 
 ROOT = Path(__file__).resolve().parent.parent
 SECTIONS_PATH = ROOT / "data" / "sections.json"
@@ -57,6 +59,7 @@ class GuardResult:
 class AnswerResult:
     answer: str
     decisions: list[tuple[dict, Decision]]
+    used_sections: list[dict]
     guard: GuardResult
     persona: dict
     question: str
@@ -64,11 +67,11 @@ class AnswerResult:
 
 
 def load_sections() -> list[dict]:
-    return json.loads(SECTIONS_PATH.read_text(encoding="utf-8"))
+    return store.load_sections()
 
 
 def load_personas() -> list[dict]:
-    return load_yaml(PERSONAS_PATH)["personas"]
+    return store.load_personas()
 
 
 def load_policy() -> dict:
@@ -94,6 +97,11 @@ def render_block(section: dict, decision: Decision) -> str | None:
         body = mask_text(section["text"], section.get("entities", []))
         return f"[A3 정보 마스킹 | {header}]\n{body}"
     return None  # A4: 프롬프트 진입 자체를 차단
+
+
+def render_result_block(result: dict) -> str:
+    header = f"{result['doc_title']} › {result['title']}"
+    return f"[{result['mode_name']} | D{result['security_level']} | {header}]\n{result['rendered']}"
 
 
 def forbidden_strings(decisions: list[tuple[dict, Decision]]) -> list[str]:
@@ -125,6 +133,21 @@ def _generate(client, system: str, question: str) -> str:
     return "".join(b.text for b in response.content if b.type == "text")
 
 
+def guard_to_dict(guard: GuardResult) -> dict:
+    return asdict(guard)
+
+
+def result_to_decision(result: dict) -> Decision:
+    return Decision(
+        mode=result["mode"],
+        base_mode=result["mode"],
+        security_level=result["security_level"],
+        clearance=result["security_level"] + result["gap"],
+        gap=result["gap"],
+        reasons=result.get("reasons", []),
+    )
+
+
 def answer(
     question: str,
     persona: dict,
@@ -132,18 +155,30 @@ def answer(
     sections: list[dict] | None = None,
     policy: dict | None = None,
     client=None,
+    conn: sqlite3.Connection | None = None,
 ) -> AnswerResult:
     if sections is None:
-        sections = load_sections()
+        own = conn is None
+        conn = conn or store.get_conn()
+        try:
+            external = persona.get("channel") == "external"
+            sections = store.load_sections(conn, external_only=external)
+        finally:
+            if own:
+                conn.close()
     if policy is None:
         policy = load_policy()
     if client is None:
         import anthropic
         client = anthropic.Anthropic()
 
-    decisions = [(s, decide(s, persona, policy, purpose)) for s in sections]
+    from app import retrieval
 
-    blocks = [b for s, d in decisions if (b := render_block(s, d)) is not None]
+    used_sections = retrieval.search_sections(question, persona, sections, policy, purpose)
+    section_by_id = {s["id"]: s for s in sections}
+    decisions = [(section_by_id[r["id"]], result_to_decision(r)) for r in used_sections]
+
+    blocks = [render_result_block(r) for r in used_sections]
     system = SYSTEM_TEMPLATE.format(
         persona_name=persona["name"],
         clearance=persona["clearance"],
@@ -168,4 +203,4 @@ def answer(
             guard.blocked = True
             text = BLOCKED_MESSAGE
 
-    return AnswerResult(text, decisions, guard, persona, question, purpose)
+    return AnswerResult(text, decisions, used_sections, guard, persona, question, purpose)

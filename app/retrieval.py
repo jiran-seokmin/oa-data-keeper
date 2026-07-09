@@ -74,38 +74,52 @@ def search(
     try:
         external = persona.get("channel") == "external"
         sections = store.load_sections(conn, external_only=external)
-
-        tokens = _tokens(question)
-        results: list[dict] = []
-        for s in sections:
-            d = decide(s, persona, policy, purpose)
-            if d.mode == 4:
-                continue  # A4: 인덱스 진입 자체 차단 (존재 은닉)
-
-            rendered, match_text = _render(s, d.mode)
-            haystack = match_text.lower()
-            matched = [t for t in tokens if t in haystack]
-            if not matched:
-                continue
-
-            results.append({
-                "id": s["id"],
-                "doc": s["doc"],
-                "doc_title": s["doc_title"],
-                "title": s["title"],
-                "security_level": s["security_level"],
-                "mode": d.mode,
-                "mode_name": MODE_NAMES[d.mode],
-                "gap": d.gap,
-                "reasons": d.reasons,
-                "rendered": rendered,
-                "content_hidden": d.mode == 1,  # A1은 본문 미공개
-                "matched": sorted(set(matched)),
-            })
-
-        # 관련도(매칭 토큰 수) 내림차순, 동률은 문서·섹션 순
-        results.sort(key=lambda r: (-len(r["matched"]), r["id"]))
-        return results
+        return search_sections(question, persona, sections, policy, purpose)
     finally:
         if own:
             conn.close()
+
+
+def search_sections(
+    question: str,
+    persona: dict,
+    sections: list[dict],
+    policy: dict,
+    purpose: str = "info",
+) -> list[dict]:
+    """접근 판정이 적용된 섹션 리스트에서 질문 관련 결과만 반환한다.
+
+    DB 조회와 순수 검색을 분리해 Phase E의 LLM 답변 파이프라인도 동일한
+    A4 제외·모드별 렌더 규칙을 재사용하게 한다.
+    """
+    tokens = _tokens(question)
+    results: list[dict] = []
+    for s in sections:
+        d = decide(s, persona, policy, purpose)
+        if d.mode == 4:
+            continue  # A4: 인덱스 진입 자체 차단 (존재 은닉)
+
+        rendered, match_text = _render(s, d.mode)
+        haystack = match_text.lower()
+        matched = [t for t in tokens if t in haystack]
+        if not matched:
+            continue
+
+        results.append({
+            "id": s["id"],
+            "doc": s["doc"],
+            "doc_title": s["doc_title"],
+            "title": s["title"],
+            "security_level": s["security_level"],
+            "mode": d.mode,
+            "mode_name": MODE_NAMES[d.mode],
+            "gap": d.gap,
+            "reasons": d.reasons,
+            "rendered": rendered,
+            "content_hidden": d.mode == 1,  # A1은 본문 미공개
+            "matched": sorted(set(matched)),
+        })
+
+    # 관련도(매칭 토큰 수) 내림차순, 동률은 문서·섹션 순
+    results.sort(key=lambda r: (-len(r["matched"]), r["id"]))
+    return results

@@ -1,8 +1,12 @@
 # worktrees (각 작업은 .worktrees/<작업명> 아래에서 진행)
 .worktrees/
 
-# OS
+# OS / 에디터
 .DS_Store
+*.swp
+
+# 도구 산출물 (Playwright 스냅샷·로그, 검증용 스크린샷)
+.playwright-mcp/
 
 # Python
 .venv/

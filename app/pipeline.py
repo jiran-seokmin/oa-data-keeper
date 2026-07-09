@@ -133,24 +133,29 @@ def _create_llm_client():
 
 def _generate(client, system: str, question: str) -> str:
     model = llm_model()
-    if hasattr(client, "interactions"):
-        interaction = client.interactions.create(
-            model=model,
-            system_instruction=system,
-            input=question,
-        )
-        return getattr(interaction, "output_text", "") or ""
 
-    response = client.messages.create(
+    # Anthropic 클라이언트는 messages.create를 노출한다. (google-genai는 미노출)
+    if hasattr(client, "messages"):
+        response = client.messages.create(
+            model=model,
+            max_tokens=16000,
+            thinking={"type": "adaptive"},
+            system=system,
+            messages=[{"role": "user", "content": question}],
+        )
+        if response.stop_reason == "refusal":
+            return "요청이 안전상의 이유로 거절되었습니다."
+        return "".join(b.text for b in response.content if b.type == "text")
+
+    # google-genai (Gemini): 표준 API models.generate_content + config.system_instruction
+    from google.genai import types
+
+    response = client.models.generate_content(
         model=model,
-        max_tokens=16000,
-        thinking={"type": "adaptive"},
-        system=system,
-        messages=[{"role": "user", "content": question}],
+        contents=question,
+        config=types.GenerateContentConfig(system_instruction=system),
     )
-    if response.stop_reason == "refusal":
-        return "요청이 안전상의 이유로 거절되었습니다."
-    return "".join(b.text for b in response.content if b.type == "text")
+    return getattr(response, "text", "") or ""
 
 
 def guard_to_dict(guard: GuardResult) -> dict:

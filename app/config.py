@@ -47,7 +47,7 @@ def llm_model() -> str:
     if configured:
         return configured
     if llm_provider() == "gemini":
-        return "gemini-3.5-flash"
+        return "gemini-2.5-flash"
     return "claude-opus-4-8"
 
 

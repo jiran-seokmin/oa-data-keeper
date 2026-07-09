@@ -20,9 +20,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import pipeline, retrieval, store
+from app import pipeline, retrieval, store, views
 from app.config import has_llm_credentials, llm_provider, load_dotenv
-from app.engine import decide
+from app.engine import MODE_NAMES, decide
 from app.pipeline import load_policy
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -83,6 +83,56 @@ def search(req: SearchReq) -> dict:
     purpose = req.purpose if req.purpose in ("info", "judgment") else "info"
     results = retrieval.search(req.question, persona, POLICY, purpose)
     return {"persona": persona, "purpose": purpose, "query": req.question, "results": results}
+
+
+@app.get("/api/sections")
+def sections(persona_id: str) -> dict:
+    """전 문서·전 섹션을 현재 페르소나 기준 판정한 뷰 (그리드·문서 뷰어용).
+
+    시각화 목적이므로 A4(차단) 섹션도 잠금 상태로 포함한다. (실제 질의 경로인
+    /api/search·/api/chat 은 A4를 완전히 제외한다.)
+    """
+    persona = _persona_or_404(persona_id)
+    conn = store.get_conn()
+    try:
+        docs = []
+        for d in store.load_documents(conn):
+            secs = store.sections_for_doc(d["doc"], conn)
+            depts = sorted({dep for s in secs for dep in s.get("departments", [])})
+            docs.append({
+                "doc": d["doc"],
+                "doc_title": d["doc_title"],
+                "dept_label": ", ".join(depts) if depts else "전사 공개",
+                "sections": [views.section_view(s, decide(s, persona, POLICY)) for s in secs],
+            })
+        return {"persona": persona, "docs": docs}
+    finally:
+        conn.close()
+
+
+@app.get("/api/matrix")
+def matrix() -> dict:
+    """전 섹션 × 전 페르소나 판정 히트맵."""
+    personas = store.load_personas()
+    conn = store.get_conn()
+    try:
+        rows = []
+        for d in store.load_documents(conn):
+            for s in store.sections_for_doc(d["doc"], conn):
+                cells = []
+                for p in personas:
+                    dec = decide(s, p, POLICY)
+                    cells.append({
+                        "persona_id": p["id"], "mode": dec.mode,
+                        "mode_name": MODE_NAMES[dec.mode], "reason": " · ".join(dec.reasons),
+                    })
+                rows.append({
+                    "id": s["id"], "doc_title": d["doc_title"], "title": s["title"],
+                    "d": s["security_level"], "cells": cells,
+                })
+        return {"personas": personas, "rows": rows}
+    finally:
+        conn.close()
 
 
 @app.post("/api/chat")

@@ -19,8 +19,8 @@ from pathlib import Path
 
 from app.db import DB_PATH, get_conn, init_db
 
-# 파서·플레이스홀더 로직은 기존 수집 파이프라인 것을 재사용한다 (중복 구현 금지).
-from app.ingest import assign_placeholders, split_sections
+# 플레이스홀더 로직은 기존 수집 파이프라인 것을 재사용한다 (중복 구현 금지).
+from app.ingest import assign_placeholders
 
 ROOT = Path(__file__).resolve().parent.parent
 SAMPLES_DIR = ROOT / "data" / "samples"
@@ -36,8 +36,9 @@ PERSONAS = [
     {"id": "ceo", "name": "CEO", "clearance": 4, "department": "경영진", "channel": "internal"},
 ]
 
-# ── 등급 시드 (섹션 id → 분류 결과) ──────────────────────────────────────
-# id = "<파일stem>#<섹션인덱스>" (split_sections 출력과 일치해야 함)
+# ── 등급 시드 (원본 heading 섹션 id → 분류 결과) ─────────────────────────
+# id = "<파일stem>#<heading인덱스>". DB 저장은 문단/의미 단위 id("<파일stem>#<chunk인덱스>")
+# 로 확장하지만, 등급 시드는 사람이 검수한 heading 단위 기준을 문단 chunk에 상속한다.
 # entities는 text/type만 — placeholder는 assign_placeholders가 코퍼스 전역으로 부여한다.
 GRADES: dict[str, dict] = {
     # ── AI 사업 전략 보고서 (D0/D2/D3/D4 혼재 — 대표 데모 문서) ──
@@ -284,25 +285,89 @@ GRADES: dict[str, dict] = {
 }
 
 
+def split_semantic_sections(md_path: Path) -> tuple[str, list[dict]]:
+    """마크다운 원문을 문단/의미 단위 보안 객체로 분리한다.
+
+    - `##` heading은 등급 시드의 parent 단위로 보존한다.
+    - 빈 줄로 나뉜 문단 하나를 독립적인 `sections` row로 저장한다.
+    - 너무 짧은 라인 단위가 아니라 문단 단위라 검색/LLM 컨텍스트에서 의미가 유지된다.
+    """
+    doc_title = md_path.stem
+    chunks: list[dict] = []
+    heading_title: str | None = None
+    heading_idx = -1
+    paragraph_idx_in_heading = 0
+    paragraph_lines: list[str] = []
+
+    def flush_paragraph() -> None:
+        nonlocal paragraph_lines, paragraph_idx_in_heading
+        if heading_title is None:
+            paragraph_lines = []
+            return
+        text = "\n".join(line.strip() for line in paragraph_lines).strip()
+        paragraph_lines = []
+        if not text:
+            return
+
+        chunk_idx = len(chunks)
+        paragraph_idx_in_heading += 1
+        source_section_id = f"{md_path.stem}#{heading_idx}"
+        chunks.append({
+            "id": f"{md_path.stem}#{chunk_idx}",
+            "doc": md_path.stem,
+            "doc_title": doc_title,
+            "seq": chunk_idx,
+            "title": f"{heading_title} · 문단 {paragraph_idx_in_heading}",
+            "parent_title": heading_title,
+            "source_section_id": source_section_id,
+            "text": text,
+        })
+
+    for raw in md_path.read_text(encoding="utf-8").splitlines():
+        line = raw.rstrip()
+        if line.startswith("# ") and not line.startswith("## "):
+            doc_title = line[2:].strip()
+            continue
+        if line.startswith("## "):
+            flush_paragraph()
+            heading_idx += 1
+            paragraph_idx_in_heading = 0
+            heading_title = line[3:].strip()
+            continue
+        if not line.strip():
+            flush_paragraph()
+            continue
+        paragraph_lines.append(line)
+    flush_paragraph()
+
+    for chunk in chunks:
+        chunk["doc_title"] = doc_title
+    return doc_title, chunks
+
+
+def _entities_in_text(entities: list[dict], text: str) -> list[dict]:
+    return [dict(e) for e in entities if e["text"] in text]
+
+
 def build_sections() -> tuple[list[dict], list[str]]:
     """samples 파싱 → GRADES 병합 → 플레이스홀더 부여. (sections, 미매칭 id 목록) 반환.
 
-    반환 dict 스키마는 기존 data/sections.json 항목과 동일하게 맞춘다
-    (engine/pipeline/store 재사용의 핵심).
+    반환 dict 스키마는 기존 data/sections.json 항목과 호환되며, 각 항목은 문단/의미 단위
+    보안 객체다. `source_section_id`로 사람이 검수한 heading 단위 등급 시드를 참조한다.
     """
     all_sections: list[dict] = []
     for md_path in sorted(SAMPLES_DIR.glob("*.md")):
         if md_path.stem == "README":
             continue
-        _, sections = split_sections(md_path)
+        _, sections = split_semantic_sections(md_path)
         all_sections.extend(sections)
 
     missing: list[str] = []
     for s in all_sections:
-        g = GRADES.get(s["id"])
+        g = GRADES.get(s["source_section_id"])
         if g is None:
             # default-deny: 등급 시드가 없으면 D4로 격리하고 검수 대상 표시
-            missing.append(s["id"])
+            missing.append(s["source_section_id"])
             s.update(
                 security_level=4,
                 confidence=0.0,
@@ -314,18 +379,19 @@ def build_sections() -> tuple[list[dict], list[str]]:
             )
             continue
         conf = g.get("confidence", DEFAULT_CONFIDENCE)
+        entities = _entities_in_text(g.get("entities", []), s["text"])
         s.update(
             security_level=g["security_level"],
             confidence=conf,
             keywords=list(g.get("keywords", [])),
             departments=list(g.get("departments", [])),
             summary_generalized=g.get("summary_generalized", ""),
-            entities=[dict(e) for e in g.get("entities", [])],
+            entities=entities,
         )
         s["needs_review"] = conf < 0.8 or g["security_level"] >= 3
 
     assign_placeholders(all_sections)
-    return all_sections, missing
+    return all_sections, sorted(set(missing))
 
 
 def seed(db_path: str | Path = DB_PATH) -> dict:
@@ -348,12 +414,13 @@ def seed(db_path: str | Path = DB_PATH) -> dict:
         # sections
         conn.executemany(
             """INSERT INTO sections
-               (id, doc, seq, title, text, security_level, confidence,
+               (id, doc, seq, title, parent_title, source_section_id, text, security_level, confidence,
                 needs_review, keywords, departments, summary_generalized)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             [
                 (
-                    s["id"], s["doc"], int(s["id"].split("#")[1]), s["title"], s["text"],
+                    s["id"], s["doc"], s["seq"], s["title"], s["parent_title"],
+                    s["source_section_id"], s["text"],
                     s["security_level"], s["confidence"], 1 if s["needs_review"] else 0,
                     json.dumps(s["keywords"], ensure_ascii=False),
                     json.dumps(s["departments"], ensure_ascii=False),
@@ -396,8 +463,8 @@ def report() -> int:
     """A1 검증용: 등급 병합 결과와 미매칭 섹션을 출력한다 (DB 미생성)."""
     sections, missing = build_sections()
     grade_keys = {k for k in GRADES}
-    parsed_ids = {s["id"] for s in sections}
-    orphan = sorted(grade_keys - parsed_ids)  # GRADES에만 있고 실제 섹션엔 없는 id
+    parsed_source_ids = {s["source_section_id"] for s in sections}
+    orphan = sorted(grade_keys - parsed_source_ids)  # GRADES에만 있고 실제 heading엔 없는 id
 
     print(f"문서 {len({s['doc'] for s in sections})}개 · 섹션 {len(sections)}개\n")
     by_level: dict[int, int] = {}
@@ -406,7 +473,7 @@ def report() -> int:
         by_level[lvl] = by_level.get(lvl, 0) + 1
         ents = ",".join(f"{e['text']}→{e['placeholder']}" for e in s["entities"]) or "-"
         review = " ⚠검수" if s["needs_review"] else ""
-        print(f"  D{lvl} {s['id']:42s} {s['title']}{review}")
+        print(f"  D{lvl} {s['id']:42s} {s['title']} ({s['source_section_id']}){review}")
         print(f"       부서={s['departments']} 키워드={s['keywords']}")
         print(f"       요약={s['summary_generalized']}")
         print(f"       엔티티={ents}\n")

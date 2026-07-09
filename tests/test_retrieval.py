@@ -23,7 +23,7 @@ SALES_LEAD = {"name": "영업팀장", "clearance": 3, "department": "영업팀",
 CEO = {"name": "CEO", "clearance": 4, "department": "경영진", "channel": "internal"}
 ALL = [EXTERNAL, JUNIOR, SALES_REP, SALES_LEAD, CEO]
 
-MNA = "ai_sales_strategy_report#4"  # 비공개 인수 검토 (D4)
+MNA = "ai_sales_strategy_report#12"  # 비공개 인수 검토 첫 문단 (D4)
 
 _fails = 0
 
@@ -45,7 +45,7 @@ def run(conn):
 
     # ── 시딩 결과 ──
     secs = store.load_sections(conn)
-    check("시딩: 섹션 21개", len(secs) == 21)
+    check("시딩: 의미 단위 섹션 63개", len(secs) == 63)
 
     # ── 유출 방지 ──
     check("C0 외부 'M&A 원문 엔티티' 검색 → 0건 (존재 은닉)",
@@ -91,10 +91,10 @@ def run(conn):
     ext_res = q("논의 중인 고객사", EXTERNAL)
     check("C0 외부 결과는 전부 D0 공개", all(r["security_level"] == 0 for r in ext_res))
     check("C0 외부: 기밀 파이프라인(D2)은 미노출",
-          find(ext_res, "ai_sales_strategy_report#1") is None)
-    rep = find(q("논의 중인 고객사", SALES_REP), "ai_sales_strategy_report#1")
+          find(ext_res, "ai_sales_strategy_report#3") is None)
+    rep = find(q("논의 중인 고객사", SALES_REP), "ai_sales_strategy_report#3")
     check("C2 영업원 파이프라인 A0 원문 노출", rep and rep["mode"] == 0)
-    jun = find(q("논의 중인 고객사", JUNIOR), "ai_sales_strategy_report#1")
+    jun = find(q("논의 중인 고객사", JUNIOR), "ai_sales_strategy_report#3")
     check("C1 신입 파이프라인 A2 요약으로 대체", jun and jun["mode"] == 2)
 
 

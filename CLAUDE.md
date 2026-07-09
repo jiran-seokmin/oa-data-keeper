@@ -33,7 +33,7 @@ uv venv .venv && uv pip install -r requirements.txt --python .venv/bin/python  #
 ## 아키텍처 핵심 (파일 여러 개에 걸친 규칙)
 
 - **판정은 결정론적 코드만**: `app/engine.py` + `app/policy.yaml`. 접근 판정을 LLM에 맡기지 말 것 (감사 가능성·인젝션 내성). LLM은 수집 단계의 분류·요약·엔티티 추출(`app/ingest.py`)에만 사용.
-- **판정 규칙**: `gap = C − D` 매트릭스(≥0→A4, −1→A2, −2→A1, ≤−3→A0) + 부서 보정 +1 + 판단/집계 질의 시 A3 승격. 불변 규칙: D4는 보정 상승 불가, 미분류 섹션은 D4 취급(default-deny), 외부 채널은 D0만 허용.
+- **판정 규칙**: `gap = C − D` 매트릭스(≥0→A4, −1→A2, −2→A1, ≤−3→A0) + D4 특칙(C0/C1→A0, C2→A1, C3→A3, C4→A4) + 부서 보정 +1 + 판단/집계 질의 시 A3 승격. 불변 규칙: D4는 보정 상승 불가, 미분류 섹션은 관리자 검수 전 접근 차단(default-deny), 외부 채널은 D0만 허용.
 - **분류 결과는 고정·커밋**: `data/labels.json`(사전 라벨) → `data/sections.json`(산출물). 데모 재현성을 위해 데모 직전에 라이브 분류를 돌리지 않는다. 시드 문서(`data/seed/`)를 수정하면 labels.json의 해당 섹션 키(`<파일stem>#<섹션인덱스>`)도 함께 갱신해야 한다.
 - **실시간 질의응답(`app/pipeline.py`)은 Phase 2** — MVP 데모의 필수 경로가 아니며, API 키가 있을 때만 동작하는 보너스. 엔진 출력의 1차 소비자는 UI의 문서 렌더링이다.
 - 엔티티 마스킹은 긴 문자열부터 치환(부분 문자열 겹침 방지), 같은 엔티티는 코퍼스 전체에서 같은 플레이스홀더를 갖는다(`app/ingest.py`의 `assign_placeholders`).

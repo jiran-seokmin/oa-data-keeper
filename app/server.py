@@ -7,6 +7,7 @@
   GET  /api/documents?persona_id=  문서 목록 + 페르소나별 lock 상태
   POST /api/search                 접근제어 키워드 검색 (무-LLM, P0 핵심)
   POST /api/documents/upload       업로드 문서 Gemini 보안 등급 분류 + DB 추가
+  DELETE /api/documents/{doc}       문서와 섹션 등급 메타데이터 삭제
   POST /api/chat                   Phase E LLM 답변 + 출력 가드 (키 없으면 503)
 
 접근 판정은 항상 engine.decide()를 경유한다 (판정에 LLM 미사용).
@@ -97,6 +98,14 @@ def upload_document(req: UploadReq) -> dict:
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"문서 분류 파이프라인 실패: {exc}") from exc
     return result
+
+
+@app.delete("/api/documents/{doc}")
+def delete_document(doc: str) -> dict:
+    deleted = store.delete_document(doc)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail=f"문서를 찾을 수 없습니다: {doc}")
+    return {"deleted": deleted["doc"], "doc_title": deleted["doc_title"]}
 
 
 @app.post("/api/search")

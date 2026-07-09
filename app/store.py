@@ -105,6 +105,41 @@ def load_documents(conn: sqlite3.Connection | None = None) -> list[dict]:
             conn.close()
 
 
+def delete_document(doc: str, conn: sqlite3.Connection | None = None) -> dict | None:
+    """Delete a document and all section-grade metadata below it.
+
+    SQLite schema intentionally has no ON DELETE CASCADE, so delete in FK-safe
+    order: entities -> sections -> documents.
+    """
+    own = conn is None
+    conn = conn or get_conn()
+    try:
+        document = conn.execute(
+            "SELECT doc, doc_title, source_path FROM documents WHERE doc=?",
+            (doc,),
+        ).fetchone()
+        if document is None:
+            return None
+        section_ids = [
+            r["id"] for r in conn.execute("SELECT id FROM sections WHERE doc=?", (doc,)).fetchall()
+        ]
+        if section_ids:
+            placeholders = ",".join("?" for _ in section_ids)
+            conn.execute(f"DELETE FROM entities WHERE section_id IN ({placeholders})", section_ids)
+        conn.execute("DELETE FROM sections WHERE doc=?", (doc,))
+        conn.execute("DELETE FROM documents WHERE doc=?", (doc,))
+        if own:
+            conn.commit()
+        return dict(document)
+    except Exception:
+        if own:
+            conn.rollback()
+        raise
+    finally:
+        if own:
+            conn.close()
+
+
 def get_persona(persona_id: str, conn: sqlite3.Connection | None = None) -> dict | None:
     own = conn is None
     conn = conn or get_conn()

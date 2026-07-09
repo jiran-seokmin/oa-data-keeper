@@ -438,6 +438,31 @@ img { display: block; }
   box-shadow: 0 0 0 5px rgba(17, 24, 39, 0.10);
   animation: dk-pulse 1.2s ease-in-out infinite;
 }
+.dk-doc-delete {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  place-items: center;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  background: #FFFFFF;
+  color: #9CA3AF;
+  cursor: pointer;
+  transition: border-color .12s, background .12s, color .12s;
+}
+.dk-doc-delete:hover {
+  border-color: #FCA5A5;
+  background: #FEF2F2;
+  color: #B91C1C;
+}
+.dk-doc-delete:disabled {
+  cursor: default;
+  opacity: .65;
+}
+.dk-doc-delete:disabled svg {
+  animation: dk-spin 1s linear infinite;
+}
 @keyframes dk-spin {
   to { transform: rotate(360deg); }
 }

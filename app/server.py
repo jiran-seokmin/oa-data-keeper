@@ -6,6 +6,7 @@
   GET  /api/personas               페르소나 목록
   GET  /api/documents?persona_id=  문서 목록 + 페르소나별 lock 상태
   POST /api/search                 접근제어 키워드 검색 (무-LLM, P0 핵심)
+  POST /api/documents/upload       업로드 문서 Gemini 보안 등급 분류 + DB 추가
   POST /api/chat                   Phase E LLM 답변 + 출력 가드 (키 없으면 503)
 
 접근 판정은 항상 engine.decide()를 경유한다 (판정에 LLM 미사용).
@@ -20,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import pipeline, retrieval, store, views
+from app import pipeline, retrieval, store, upload_pipeline, views
 from app.config import has_llm_credentials, llm_provider, load_dotenv
 from app.engine import MODE_NAMES, decide
 from app.pipeline import load_policy
@@ -43,6 +44,11 @@ class SearchReq(BaseModel):
     persona_id: str
     question: str
     purpose: str = "info"  # "info" | "judgment"
+
+
+class UploadReq(BaseModel):
+    filename: str
+    content: str
 
 
 def _persona_or_404(persona_id: str) -> dict:
@@ -75,6 +81,22 @@ def documents(persona_id: str) -> list[dict]:
         return out
     finally:
         conn.close()
+
+
+@app.post("/api/documents/upload")
+def upload_document(req: UploadReq) -> dict:
+    filename = req.filename.strip()
+    if not filename.lower().endswith((".txt", ".md")):
+        raise HTTPException(status_code=400, detail=".txt 또는 .md 파일만 업로드할 수 있습니다.")
+    try:
+        result = upload_pipeline.classify_and_store(filename, req.content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"문서 분류 파이프라인 실패: {exc}") from exc
+    return result
 
 
 @app.post("/api/search")

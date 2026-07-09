@@ -1,5 +1,5 @@
 import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, FileText, Info, Lock, Sparkles } from "lucide-react";
+import { ArrowUp, CheckCircle2, FileText, Info, LoaderCircle, Lock, Sparkles, UploadCloud } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 /* ── 타입 ─────────────────────────────────────────────── */
@@ -52,6 +52,9 @@ type ChatMsg = {
   guard?: Guard;
   fallback?: boolean;
 };
+type UploadStage = "reading" | "classifying" | "saving" | "complete" | "error";
+type UploadStatus = { stage: UploadStage; filename: string; message: string; doc?: string };
+type UploadResult = { doc: string; doc_title: string; sections: number; max_d: number; needs_review: number };
 
 /* ── canonical A모드 · D등급 (디자인 팔레트, PRD 표기) ── */
 const MODES: Record<number, { name: string; desc: string; fg: string; bg: string }> = {
@@ -142,10 +145,37 @@ function MarkdownAnswer({ children }: { children: string }) {
   );
 }
 
-function DocumentSidebar({ docs, activeDoc, onSelectDoc }: { docs: DocView[]; activeDoc: DocView | null; onSelectDoc: (doc: string) => void }) {
+function DocumentSidebar({ docs, activeDoc, onSelectDoc, onUpload, uploadStatus }: {
+  docs: DocView[]; activeDoc: DocView | null; onSelectDoc: (doc: string) => void; onUpload?: (file: File) => void; uploadStatus?: UploadStatus | null;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const activeUpload = uploadStatus && uploadStatus.stage !== "complete" && uploadStatus.stage !== "error";
+  const chooseFile = (files: FileList | null) => {
+    const file = files?.[0];
+    if (file && onUpload) onUpload(file);
+  };
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", padding: "0 2px" }}>문서함</div>
+      {onUpload && (
+        <div
+          className={`dk-doc-dropzone${activeUpload ? " active" : ""}`}
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
+          onDrop={(e) => {
+            e.preventDefault();
+            chooseFile(e.dataTransfer.files);
+          }}
+        >
+          <input ref={fileInputRef} type="file" accept=".txt,.md,text/plain,text/markdown" style={{ display: "none" }} onChange={(e) => chooseFile(e.target.files)} />
+          <div className="dk-doc-drop-icon">{activeUpload ? <LoaderCircle size={16} /> : <UploadCloud size={16} />}</div>
+          <div style={{ minWidth: 0 }}>
+            <div className="dk-doc-drop-title">문서 추가</div>
+            <div className="dk-doc-drop-sub">.txt, .md 드래그 앤 드롭</div>
+          </div>
+        </div>
+      )}
+      {uploadStatus && <UploadProgress status={uploadStatus} />}
       {docs.map((d) => {
         const locked = d.sections.every((s) => s.kind === "blocked");
         const active = activeDoc?.doc === d.doc;
@@ -177,6 +207,32 @@ function DocumentSidebar({ docs, activeDoc, onSelectDoc }: { docs: DocView[]; ac
   );
 }
 
+function UploadProgress({ status }: { status: UploadStatus }) {
+  const steps: { key: UploadStage; label: string }[] = [
+    { key: "reading", label: "파일 읽기" },
+    { key: "classifying", label: "Gemini 보안 등급 분류" },
+    { key: "saving", label: "DB 저장" },
+    { key: "complete", label: "판정 그리드 연결" },
+  ];
+  const activeIndex = Math.max(0, steps.findIndex((s) => s.key === status.stage));
+  return (
+    <div className={`dk-upload-progress ${status.stage}`}>
+      <div className="dk-upload-head">
+        {status.stage === "complete" ? <CheckCircle2 size={15} /> : <LoaderCircle size={15} />}
+        <span>{status.filename}</span>
+      </div>
+      <div className="dk-upload-message">{status.message}</div>
+      <div className="dk-upload-steps">
+        {steps.map((step, index) => {
+          const done = status.stage === "complete" || index < activeIndex;
+          const current = index === activeIndex && status.stage !== "complete";
+          return <span key={step.key} className={`dk-upload-step${done ? " done" : ""}${current ? " current" : ""}`}>{step.label}</span>;
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ── 앱 ───────────────────────────────────────────────── */
 type View = "grid" | "viewer" | "chat" | "matrix";
 
@@ -191,6 +247,7 @@ export function App() {
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
 
   useEffect(() => {
     getJson<Persona[]>("/api/personas").then((data) => {
@@ -260,6 +317,41 @@ export function App() {
     setFocusSec(secId);
     setView("viewer");
   };
+  const selectDoc = (doc: string) => {
+    setDocId(doc);
+    setFocusSec(null);
+  };
+  const uploadDocument = useCallback(async (file: File) => {
+    if (!file.name.toLowerCase().endsWith(".txt") && !file.name.toLowerCase().endsWith(".md")) {
+      setUploadStatus({ stage: "error", filename: file.name, message: ".txt 또는 .md 파일만 업로드할 수 있습니다." });
+      return;
+    }
+    try {
+      setUploadStatus({ stage: "reading", filename: file.name, message: "문서를 읽고 의미 단위 분리를 준비합니다." });
+      const content = await file.text();
+      setUploadStatus({ stage: "classifying", filename: file.name, message: "Gemini API로 섹션별 보안 등급을 분류하고 있습니다." });
+      const result = await postJson<UploadResult>("/api/documents/upload", { filename: file.name, content });
+      setUploadStatus({ stage: "saving", filename: file.name, message: "분류 결과를 섹션 보안 객체로 DB에 저장했습니다.", doc: result.doc });
+      const data = await getJson<{ docs: DocView[] }>(`/api/sections?persona_id=${personaId}`);
+      setDocs(data.docs);
+      setMatrix(null);
+      setDocId(result.doc);
+      setFocusSec(null);
+      setView("grid");
+      setUploadStatus({
+        stage: "complete",
+        filename: file.name,
+        message: `${result.sections}개 섹션 분류 완료 · 최고 D${result.max_d} · 검수 대상 ${result.needs_review}개`,
+        doc: result.doc,
+      });
+    } catch (e) {
+      setUploadStatus({
+        stage: "error",
+        filename: file.name,
+        message: e instanceof Error ? e.message : "문서 분류에 실패했습니다.",
+      });
+    }
+  }, [personaId]);
 
   const navItems: { id: View; label: string }[] = [
     { id: "grid", label: "판정 그리드" },
@@ -307,13 +399,13 @@ export function App() {
       </div>
 
       <main className="dk-main">
-        {view === "grid" && <GridView docs={docs} activeDoc={activeDoc} persona={persona} onSelectDoc={(d) => { setDocId(d); setFocusSec(null); }} onOpen={openInViewer} />}
-        {view === "viewer" && <ViewerView docs={docs} activeDoc={activeDoc} persona={persona} focusSec={focusSec} onSelectDoc={(d) => { setDocId(d); setFocusSec(null); }} />}
+        {view === "grid" && <GridView docs={docs} activeDoc={activeDoc} persona={persona} onSelectDoc={selectDoc} onOpen={openInViewer} onUpload={uploadDocument} uploadStatus={uploadStatus} />}
+        {view === "viewer" && <ViewerView docs={docs} activeDoc={activeDoc} persona={persona} focusSec={focusSec} onSelectDoc={selectDoc} onUpload={uploadDocument} uploadStatus={uploadStatus} />}
         {view === "chat" && (
           <ChatView persona={persona} chat={chat} loading={chatLoading} input={chatInput}
             onInput={setChatInput} onSend={() => send(chatInput)} onSuggest={send} />
         )}
-        {view === "matrix" && <MatrixView data={matrix} docs={docs} activeDoc={activeDoc} personaId={personaId} onPick={setPersonaId} onSelectDoc={(d) => { setDocId(d); setFocusSec(null); }} />}
+        {view === "matrix" && <MatrixView data={matrix} docs={docs} activeDoc={activeDoc} personaId={personaId} onPick={setPersonaId} onSelectDoc={selectDoc} onUpload={uploadDocument} uploadStatus={uploadStatus} />}
       </main>
     </div>
   );
@@ -330,13 +422,13 @@ function ModeLegend() {
   );
 }
 
-function GridView({ docs, activeDoc, persona, onSelectDoc, onOpen }: {
-  docs: DocView[]; activeDoc: DocView | null; persona: Persona | null; onSelectDoc: (doc: string) => void; onOpen: (doc: string, sec: string) => void;
+function GridView({ docs, activeDoc, persona, onSelectDoc, onOpen, onUpload, uploadStatus }: {
+  docs: DocView[]; activeDoc: DocView | null; persona: Persona | null; onSelectDoc: (doc: string) => void; onOpen: (doc: string, sec: string) => void; onUpload: (file: File) => void; uploadStatus: UploadStatus | null;
 }) {
   const cols = "minmax(240px, 1.6fr) minmax(190px, 1fr) 150px 120px";
   return (
     <div style={{ display: "grid", gridTemplateColumns: "264px minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
-      <DocumentSidebar docs={docs} activeDoc={activeDoc} onSelectDoc={onSelectDoc} />
+      <DocumentSidebar docs={docs} activeDoc={activeDoc} onSelectDoc={onSelectDoc} onUpload={onUpload} uploadStatus={uploadStatus} />
       <div>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, marginBottom: 14, flexWrap: "wrap" }}>
           <div style={{ fontSize: 13, color: "#4B5563", maxWidth: 560 }}>
@@ -397,12 +489,12 @@ function GridCellBody({ sec }: { sec: SectionView }) {
 }
 
 /* ── 문서 뷰어 ───────────────────────────────────────── */
-function ViewerView({ docs, activeDoc, persona, focusSec, onSelectDoc }: {
-  docs: DocView[]; activeDoc: DocView | null; persona: Persona | null; focusSec: string | null; onSelectDoc: (doc: string) => void;
+function ViewerView({ docs, activeDoc, persona, focusSec, onSelectDoc, onUpload, uploadStatus }: {
+  docs: DocView[]; activeDoc: DocView | null; persona: Persona | null; focusSec: string | null; onSelectDoc: (doc: string) => void; onUpload: (file: File) => void; uploadStatus: UploadStatus | null;
 }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "264px minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
-      <DocumentSidebar docs={docs} activeDoc={activeDoc} onSelectDoc={onSelectDoc} />
+      <DocumentSidebar docs={docs} activeDoc={activeDoc} onSelectDoc={onSelectDoc} onUpload={onUpload} uploadStatus={uploadStatus} />
 
       <div className="dk-card" style={{ padding: "20px 28px 8px" }}>
         {activeDoc && (
@@ -583,14 +675,14 @@ function ChatView({ persona, chat, loading, input, onInput, onSend, onSuggest }:
 }
 
 /* ── 매트릭스 ────────────────────────────────────────── */
-function MatrixView({ data, docs, activeDoc, personaId, onPick, onSelectDoc }: {
-  data: { personas: Persona[]; rows: MatrixRow[] } | null; docs: DocView[]; activeDoc: DocView | null; personaId: string; onPick: (id: string) => void; onSelectDoc: (doc: string) => void;
+function MatrixView({ data, docs, activeDoc, personaId, onPick, onSelectDoc, onUpload, uploadStatus }: {
+  data: { personas: Persona[]; rows: MatrixRow[] } | null; docs: DocView[]; activeDoc: DocView | null; personaId: string; onPick: (id: string) => void; onSelectDoc: (doc: string) => void; onUpload: (file: File) => void; uploadStatus: UploadStatus | null;
 }) {
   const rows = data?.rows.filter((row) => row.doc === activeDoc?.doc) ?? [];
   const cols = data ? `minmax(230px,1.4fr) repeat(${data.personas.length}, minmax(110px,1fr))` : "";
   return (
     <div style={{ display: "grid", gridTemplateColumns: "264px minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
-      <DocumentSidebar docs={docs} activeDoc={activeDoc} onSelectDoc={onSelectDoc} />
+      <DocumentSidebar docs={docs} activeDoc={activeDoc} onSelectDoc={onSelectDoc} onUpload={onUpload} uploadStatus={uploadStatus} />
       <div>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, marginBottom: 14, flexWrap: "wrap" }}>
           <div style={{ fontSize: 13, color: "#4B5563" }}>문서함에서 선택한 문서의 섹션 × 전 페르소나 판정 히트맵입니다. 열 머리글이나 셀을 누르면 해당 페르소나로 전환됩니다.</div>

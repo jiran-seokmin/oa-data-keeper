@@ -1,4 +1,5 @@
 anthropic>=0.60
+google-genai>=1.0
 streamlit>=1.38
 pyyaml>=6.0
 pydantic>=2.6

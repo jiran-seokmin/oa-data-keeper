@@ -16,7 +16,6 @@ from app import store
 from app.config import llm_model, llm_provider, load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
-SECTIONS_PATH = ROOT / "data" / "sections.json"
 POLICY_PATH = ROOT / "app" / "policy.yaml"
 PERSONAS_PATH = ROOT / "app" / "personas.yaml"
 

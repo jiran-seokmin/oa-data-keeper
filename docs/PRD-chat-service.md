@@ -41,7 +41,7 @@
 ## 2. 범위 (Scope)
 
 ### 2.1 In Scope — P0 (무-LLM, 데모 반드시 동작)
-- **`data/samples/*.md`(4종)만** 대상: 섹션 분리 → D등급·엔티티·A2 요약 부여 → **SQLite에 직접 시딩** (`app/seed_db.py` 실행 시 파싱+등급 병합+INSERT가 한 번에). 등급은 Claude 개발단계 분석을 사람이 검토해 코드에 커밋, 런타임 분류 없음. `data/seed/`·`data/labels.json`·`data/sections.json`은 건드리지 않는다.
+- **`data/samples/*.md`(4종)만** 대상: 섹션 분리 → D등급·엔티티·A2 요약 부여 → **SQLite에 직접 시딩** (`app/seed_db.py` 실행 시 파싱+등급 병합+INSERT가 한 번에). 등급은 Claude 개발단계 분석을 사람이 검토해 코드에 커밋, 런타임 분류 없음. (구 `data/seed/`·`data/labels.json`·`data/sections.json` 레거시 파이프라인은 2026-07-09 정리로 삭제됨.)
 - **접근제어 키워드 검색·조회**: 질문 → 접근 가능 섹션 필터(A4 제외) → 등급별 렌더 → 결과 반환
 - **FastAPI 백엔드** + **경량 프론트(HTML/JS)**: 페르소나 선택 + 검색/조회 챗 UI + 판정 근거 표시
 - 접근 판정은 기존 `engine.py` 재사용, 저장은 SQLite

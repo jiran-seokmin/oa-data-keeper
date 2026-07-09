@@ -18,8 +18,8 @@
 
 ## Phase A — 데이터 계층 (SQLite 직접 시딩, samples만) · P0
 
-> 방침: **DB에는 `data/samples/*.md` 4종만** 넣는다. `data/seed/`·`labels.json`·`sections.json`은 건드리지 않는다.
-> **중간 산출물(labels.json→sections.json) 없이 `app/seed_db.py` 하나가 DB를 직접 채운다.**
+> 방침: **DB에는 `data/samples/*.md` 4종만** 넣는다. (구 `data/seed/`·`labels.json`·`sections.json`은 2026-07-09 레거시 정리로 삭제됨.)
+> **중간 산출물 없이 `app/seed_db.py` 하나가 DB를 직접 채운다.**
 
 ### A1. samples 등급 시드 작성 — P0 · M
 - [ ] `split_sections()`를 `data/samples/*.md`에 먼저 돌려 실제 섹션 `id = <stem>#<i>`·title·text 확보 (손으로 인덱싱 금지 — 불일치 시 조용히 D4 격리)
@@ -39,7 +39,7 @@
 - [ ] `app/seed_db.py`: `split_sections()`(samples 파싱) → `GRADES` 병합(라벨 없으면 D4 격리) → `assign_placeholders()`(코퍼스 전역 일관) → 스키마 생성 → documents/sections/entities에 **직접 INSERT**
 - [ ] `app/personas.yaml` → `personas` 테이블 시딩
 - [ ] `python -m app.seed_db [--reset]` idempotent 실행, 미매칭 섹션 경고 출력
-- [ ] `ingest.py`의 `split_sections`/`assign_placeholders`는 import 재사용(중복 구현 금지), 대상 디렉터리만 `data/samples`
+- [ ] `ingest.py`의 `assign_placeholders`는 import 재사용(중복 구현 금지), 파싱은 문단 단위 `split_semantic_sections`(seed_db 자체 구현), 대상 디렉터리는 `data/samples`
 - 산출물: 생성되는 `datakeeper.db`, 재생성 명령
 - 검증: `SELECT count(*)` 섹션 수, 엔티티 placeholder 일관성, 미매칭 0건
 - 의존성: A1, A2
@@ -200,7 +200,7 @@ P0만으로 "같은 질문, 등급별 다른 조회 결과 + 판정 근거"가 �
 ## 기존 자산 재사용 체크리스트 (새로 만들지 말 것)
 - `app/engine.py` — 판정 엔진, **변경 금지**
 - `app/policy.yaml` — 정책, YAML 유지
-- `app/ingest.py`의 `split_sections()` / `assign_placeholders()` — seed_db.py에서 import 재사용 (파서·플레이스홀더 로직 중복 구현 금지)
+- `app/ingest.py`의 `assign_placeholders()` — seed_db.py·upload_pipeline.py에서 import 재사용 (플레이스홀더 로직 중복 구현 금지)
 - `app/pipeline.py` — 질의 파이프라인·출력 가드, 소스만 DB·검색결과로 교체 (P1)
 - `app/personas.yaml` — personas 테이블 seed 원본
 - `tests/test_engine.py` — 회귀 기준

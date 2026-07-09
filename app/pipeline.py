@@ -28,7 +28,7 @@ SYSTEM_TEMPLATE = """당신은 가온테크의 팀 지식 어시스턴트 '세�
 아래 <sections>의 자료만 근거로 한국어로 간결하게 답하세요. 각 블록의 접근 모드 규칙:
 
 - [A0 전체 접근]: 자유롭게 인용 가능.
-- [A1 배경 전용]: 판단·집계·가능성 평가의 근거로만 사용하세요. 이 블록의 고유명사, 수치, 금액, 조건을 답변에 직접 인용하거나 언급하는 것은 절대 금지입니다. 정성적 결론(가능/어려움/근접 등)만 말하세요.
+- [A1 배경 전용]: 판단·집계·가능성 평가의 근거로만 사용하세요. 이 블록의 고유명사, 수치, 금액, 일정, 코드명, 조건을 답변에 직접 인용·언급·암시하는 것은 절대 금지입니다. 대신 "비공개 전략 사안이 존재하며 이를 반영하면 …"처럼 **존재 사실과 정성적 함의만** 서술하세요. 예: 인수 검토 블록이 있으면 회사명·금액·일정을 말하지 말고 "비공개 인수 관련 사안이 있어 이를 감안하면 현금흐름·자금 여력 관리가 중요합니다"처럼 답하세요.
 - [A2 의미 제한]: 제공된 일반화 요약 수준까지만 언급 가능. 요약에 없는 구체 정보(사명, 금액, 인명)를 추측하거나 언급하지 마세요.
 - [A3 정보 마스킹]: 본문의 [고객사A] 같은 플레이스홀더를 그대로 사용하세요. 원래 값을 추측·복원하지 마세요.
 
@@ -97,11 +97,6 @@ def render_block(section: dict, decision: Decision) -> str | None:
         body = mask_text(section["text"], section.get("entities", []))
         return f"[A3 정보 마스킹 | {header}]\n{body}"
     return None  # A4: 프롬프트 진입 자체를 차단
-
-
-def render_result_block(result: dict) -> str:
-    header = f"{result['doc_title']} › {result['title']}"
-    return f"[{result['mode_name']} | D{result['security_level']} | {header}]\n{result['rendered']}"
 
 
 def forbidden_strings(decisions: list[tuple[dict, Decision]]) -> list[str]:
@@ -202,7 +197,10 @@ def answer(
     section_by_id = {s["id"]: s for s in sections}
     decisions = [(section_by_id[r["id"]], result_to_decision(r)) for r in used_sections]
 
-    blocks = [render_result_block(r) for r in used_sections]
+    # 프롬프트 블록은 render_block으로 조립한다. A1(노출 제한)은 원문을 '배경 전용' 태그와
+    # 함께 넣어 LLM이 추론 근거로만 쓰게 하고(직접 인용 금지 규칙 + 출력 가드가 방어),
+    # A2/A3는 요약·마스킹본을 넣는다. (검색 표시용 안내문 rendered와 분리)
+    blocks = [b for s, d in decisions if (b := render_block(s, d)) is not None]
     system = SYSTEM_TEMPLATE.format(
         persona_name=persona["name"],
         clearance=persona["clearance"],

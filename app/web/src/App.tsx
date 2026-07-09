@@ -292,6 +292,8 @@ export function App() {
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  // 응답 대기 중에도 질문 버블을 바로 보여주기 위한 낙관적 표시용 질문
+  const [pendingQ, setPendingQ] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
   const [deletingDoc, setDeletingDoc] = useState<string | null>(null);
 
@@ -326,6 +328,7 @@ export function App() {
       if (!q || !persona || chatLoading) return;
       setChatInput("");
       setChatLoading(true);
+      setPendingQ(q);
       const payload = { persona_id: persona.id, question: q, purpose: "info" };
       try {
         let msg: ChatMsg;
@@ -351,6 +354,7 @@ export function App() {
       } catch (e) {
         setChat((prev) => [...prev, { id: nextId(), q, answer: `요청 처리에 실패했습니다. ${e instanceof Error ? e.message : ""}`, sources: [] }]);
       } finally {
+        setPendingQ(null);
         setChatLoading(false);
       }
     },
@@ -475,7 +479,7 @@ export function App() {
         {view === "viewer" && <ViewerView docs={docs} activeDoc={activeDoc} persona={persona} focusSec={focusSec} onSelectDoc={selectDoc} onDeleteDoc={deleteDocument} deletingDoc={deletingDoc} onUpload={uploadDocument} uploadStatus={uploadStatus} />}
         {view === "chat" && (
           <ChatView persona={persona} chat={chat} loading={chatLoading} input={chatInput}
-            onInput={setChatInput} onSend={() => send(chatInput)} onSuggest={send} />
+            pendingQ={pendingQ} onInput={setChatInput} onSend={() => send(chatInput)} onSuggest={send} />
         )}
         {view === "matrix" && <MatrixView data={matrix} docs={docs} activeDoc={activeDoc} personaId={personaId} onPick={setPersonaId} onSelectDoc={selectDoc} onDeleteDoc={deleteDocument} deletingDoc={deletingDoc} onUpload={uploadDocument} uploadStatus={uploadStatus} />}
       </main>
@@ -628,12 +632,12 @@ function ViewerSectionBody({ sec }: { sec: SectionView }) {
 }
 
 /* ── 채팅 ─────────────────────────────────────────────── */
-function ChatView({ persona, chat, loading, input, onInput, onSend, onSuggest }: {
-  persona: Persona | null; chat: ChatMsg[]; loading: boolean; input: string;
+function ChatView({ persona, chat, loading, input, pendingQ, onInput, onSend, onSuggest }: {
+  persona: Persona | null; chat: ChatMsg[]; loading: boolean; input: string; pendingQ: string | null;
   onInput: (v: string) => void; onSend: () => void; onSuggest: (q: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [chat, loading]);
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [chat, loading, pendingQ]);
   const isEmpty = chat.length === 0 && !loading;
   const botAvatar = (
     <div className="dk-chat-avatar"><Sparkles size={14} /></div>
@@ -734,6 +738,14 @@ function ChatView({ persona, chat, loading, input, onInput, onSend, onSuggest }:
             </div>
           </div>
         ))}
+        {loading && pendingQ && (
+          <div className="dk-chat-turn">
+            <div className="dk-chat-row user">
+              <div className="dk-chat-bubble user">{pendingQ}</div>
+              {persona && <img src={personaImg(persona.clearance)} alt="" style={{ width: 30, height: 30, borderRadius: "50%", flex: "none" }} />}
+            </div>
+          </div>
+        )}
         {loading && <div className="dk-chat-row assistant">{botAvatar}<span style={{ fontSize: 12.5, color: "#9CA3AF" }}>답변 판정 중…</span></div>}
       </div>
       <div className="dk-chat-suggestions dock" aria-label="추천 질문">

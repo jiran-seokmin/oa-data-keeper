@@ -1,11 +1,11 @@
 """CLI 문서 접근 결과 뷰어.
 
-LLM/API 호출 없이 data/sections.json과 결정론적 판정 엔진만 사용한다.
+LLM/API 호출 없이 DB(datakeeper.db)와 결정론적 판정 엔진만 사용한다.
 
 예:
   python -m app.view_access --list-docs
-  python -m app.view_access --doc 01_ai_business_report --clearance 1
-  python -m app.view_access --doc 01_ai_business_report --persona sales_rep --summary
+  python -m app.view_access --doc ai_sales_strategy_report --clearance 1
+  python -m app.view_access --doc ai_sales_strategy_report --persona sales_rep --summary
 """
 
 from __future__ import annotations

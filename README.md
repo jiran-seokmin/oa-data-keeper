@@ -22,12 +22,12 @@ cd app/web && npm install && npm run build && cd ../..
 
 # 콘솔에서 문서별 접근 결과 확인 (LLM/API 불필요)
 .venv/bin/python -m app.view_access --list-docs
-.venv/bin/python -m app.view_access --doc 01_ai_business_report --clearance 1
-.venv/bin/python -m app.view_access --doc 01_ai_business_report --persona sales_rep --summary
+.venv/bin/python -m app.view_access --doc ai_sales_strategy_report --clearance 1
+.venv/bin/python -m app.view_access --doc ai_sales_strategy_report --persona sales_rep --summary
 ```
 
 - **MVP 데모(문서 뷰어, 판정 매트릭스)는 API 호출 없이 결정론적으로 동작**한다.
-- 라이브 분류로 라벨을 다시 만들려면: `.venv/bin/python -m app.ingest` (`ANTHROPIC_API_KEY` 필요).
+- 등급은 `app/seed_db.py`의 `GRADES`(개발단계 Claude 분석을 사람이 검토·커밋한 정적 시드)에서 나온다. 샘플 문서를 수정하면 GRADES도 함께 갱신하고 `--report`로 미매칭을 점검한다.
 - Phase E LLM 답변 모드(`/api/chat`)는 `.env` 또는 쉘 환경변수로 API 키가 필요하다. 키가 없거나 모델 호출이 실패하면 웹 FE가 자동으로 `/api/search` 조회 모드로 폴백한다.
 - 기본 provider는 Gemini다. `GEMINI_API_KEY` 또는 `GOOGLE_API_KEY`를 설정하면 Gemini SDK가 자동으로 사용한다.
 - 모델 변경: `ACE_MODEL` (Gemini 기본 `gemini-3.5-flash`, Anthropic 기본 `claude-opus-4-8`).
@@ -62,7 +62,7 @@ npm run dev  # http://127.0.0.1:5173, /api는 FastAPI 8000번으로 프록시
 
 **킬러 장면: 같은 문서를 열어 둔 채 사이드바에서 페르소나만 바꾸면, 문단/의미 단위별 렌더링이 실시간으로 바뀐다.**
 
-1. **📄 문서 뷰어** — "영업 파이프라인 현황" 문서를 열고 외부 고객 → 신입 → 영업팀원 → 팀장 → CEO 순회:
+1. **📄 문서 뷰어** — "2026 하반기 AI 보안 사업 전략 보고서" 문서를 열고 외부 고객 → 신입 → 영업팀원 → 팀장 → CEO 순회:
    - ✅ A0 원문 · 🧠 A1 블러+"AI 추론 전용" 배지 · 🔍 A2 요약 카드 · 🎭 A3 엔티티 마스킹 하이라이트 · 🚫 A4 잠금
    - 문단마다 D등급 배지와 판정 사유(gap, 부서 보정)가 함께 표시됨
 2. **🗺️ 판정 매트릭스** — 의미 단위 섹션 63개 × 페르소나 5개 판정을 색상 히트맵 한 화면으로
@@ -79,9 +79,10 @@ app/
   engine.py      판정 엔진 (순수 파이썬 — LLM 미사용, 감사 가능)
   policy.yaml    gap 매트릭스 + 컨텍스트 보정 정책
   personas.yaml  데모 페르소나 (실서비스: SSO/조직도 연동)
-  keywords.yaml  관리자 등록 키워드 → 등급 힌트 (라이브 분류용)
-  ingest.py      수집: 섹션 분리 → 분류 → sections.json
+  keywords.yaml  관리자 등록 키워드 → 등급 힌트 (업로드 문서 분류용)
+  ingest.py      분류 공용 자산 (분류 프롬프트, 엔티티 플레이스홀더)
   seed_db.py     samples 원문 → 문단/의미 단위 보안 객체 → SQLite 직접 시딩
+  upload_pipeline.py  런타임 문서 업로드 → Gemini 분류 → DB 추가
   pipeline.py    [Phase 2] 질의: 판정 → 모드별 변환 → 생성 → 출력 가드
   ui.py          Streamlit 데모 (문서 뷰어 + 매트릭스 + 수집 결과 + 감사 로그)
   server.py      FastAPI 백엔드 (/api/search, /api/chat, 빌드된 React FE 서빙)
@@ -89,9 +90,7 @@ app/
   view_access.py CLI 문서 접근 결과 뷰어 (LLM/API 미사용)
 data/
   samples/       DB 시딩 대상 원문 4개 (문단/의미 단위로 분해)
-  seed/          레거시 수집 파이프라인용 가상 회사 문서
-  labels.json    레거시 수집 파이프라인용 사전 분류 라벨
-  sections.json  레거시 수집 파이프라인 산출물
+  schema.sql     SQLite 스키마 (documents/sections/entities/personas)
 tests/
   test_engine.py 판정 시나리오 테스트: python tests/test_engine.py
 ```
@@ -104,4 +103,4 @@ tests/
 - 담당 부서 데이터 `1단계 완화`, 판단/집계 목적은 A2/A3 → **A1(추론 근거 전용)** 완화
 - 외부 채널은 D0만 A0, 나머지 전부 A4 (하드 캡)
 - **D4는 어떤 보정으로도 상승 불가**, 미분류 섹션은 관리자 검수 전 접근 차단 (default-deny)
-- 판정은 결정론적 코드로만 — LLM은 수집 단계의 분류·요약·엔티티 추출에만 사용
+- 판정은 결정론적 코드로만 — LLM은 분류·요약·엔티티 추출(등급 시드 작성, 업로드 분류)과 챗 답변 생성에만 사용

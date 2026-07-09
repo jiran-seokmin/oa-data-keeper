@@ -1,7 +1,8 @@
 """DB 접근 계층.
 
-반환되는 섹션 dict는 기존 data/sections.json 항목과 **동일한 키 스키마**를 갖는다.
-그래야 app/engine.py의 decide()와 app/pipeline.py의 render_block()을 수정 없이 재사용한다.
+반환되는 섹션 dict는 엔진이 기대하는 표준 섹션 키 스키마(id, doc, doc_title, title, text,
+security_level, confidence, needs_review, keywords, departments, summary_generalized, entities)를
+갖는다. 그래야 app/engine.py의 decide()와 app/pipeline.py의 render_block()을 수정 없이 재사용한다.
 """
 
 from __future__ import annotations
@@ -47,7 +48,7 @@ _SECTION_SELECT = (
 
 
 def load_sections(conn: sqlite3.Connection | None = None, external_only: bool = False) -> list[dict]:
-    """전체 섹션을 sections.json 스키마 dict 리스트로 반환.
+    """전체 섹션을 표준 섹션 스키마 dict 리스트로 반환.
 
     external_only=True면 외부 채널용 코스 메타데이터 사전 필터(D0만)를 적용한다.
     (정밀 판정은 항상 engine.decide()가 담당 — 이건 인덱스 진입 전 코스 컷.)

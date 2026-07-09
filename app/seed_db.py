@@ -1,12 +1,12 @@
 """samples 직접 DB 시딩 — data/samples/*.md → SQLite (datakeeper.db)
 
-중간 산출물(labels.json→sections.json) 없이 이 스크립트 하나가 DB를 직접 채운다.
+중간 산출물 없이 이 스크립트 하나가 DB를 직접 채운다.
 
   python -m app.seed_db --report    # A1 검증: 등급 시드 병합 결과·미매칭 점검 (DB 미생성)
   python -m app.seed_db --reset     # 스키마 재생성 후 samples를 SQLite에 직접 시딩
 
 등급 시드(GRADES)는 Claude 개발단계 분석을 사람이 발표 슬라이드 등급표와 대조·검토해 커밋한
-정적 데이터다(런타임 LLM 없음). 섹션 id는 반드시 split_sections() 출력에 맞춘다 —
+정적 데이터다(런타임 LLM 없음). 섹션 id는 반드시 split_semantic_sections() 출력에 맞춘다 —
 불일치하면 해당 섹션은 조용히 D4로 격리된다(default-deny).
 """
 
@@ -19,7 +19,7 @@ from pathlib import Path
 
 from app.db import DB_PATH, get_conn, init_db
 
-# 플레이스홀더 로직은 기존 수집 파이프라인 것을 재사용한다 (중복 구현 금지).
+# 플레이스홀더 로직은 공용 모듈 것을 재사용한다 (중복 구현 금지).
 from app.ingest import assign_placeholders
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -352,8 +352,8 @@ def _entities_in_text(entities: list[dict], text: str) -> list[dict]:
 def build_sections() -> tuple[list[dict], list[str]]:
     """samples 파싱 → GRADES 병합 → 플레이스홀더 부여. (sections, 미매칭 id 목록) 반환.
 
-    반환 dict 스키마는 기존 data/sections.json 항목과 호환되며, 각 항목은 문단/의미 단위
-    보안 객체다. `source_section_id`로 사람이 검수한 heading 단위 등급 시드를 참조한다.
+    반환 dict는 엔진이 기대하는 표준 섹션 스키마(store.py 참조)를 가지며, 각 항목은
+    문단/의미 단위 보안 객체다. `source_section_id`로 사람이 검수한 heading 단위 등급 시드를 참조한다.
     """
     all_sections: list[dict] = []
     for md_path in sorted(SAMPLES_DIR.glob("*.md")):

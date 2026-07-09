@@ -150,7 +150,8 @@ data/samples/*.md (4종)          app/seed_db.py 내 등급 시드(GRADES, 커�
 
 ## 6. 데이터 모델 (SQLite)
 
-`data/sections.json`의 필드를 정규화해 저장한다. 스키마(초안):
+`data/samples/*.md` 원문을 문단/의미 단위 보안 객체로 분해해 저장한다. 기존 heading 단위 등급 시드는
+`source_section_id`로 연결해 추적한다. 스키마(초안):
 
 ```sql
 CREATE TABLE documents (
@@ -164,6 +165,8 @@ CREATE TABLE sections (
   doc                 TEXT NOT NULL REFERENCES documents(doc),
   seq                 INTEGER NOT NULL,   -- 문서 내 순서
   title               TEXT NOT NULL,
+  parent_title        TEXT NOT NULL,      -- 원문 ## heading
+  source_section_id   TEXT NOT NULL,      -- 사람이 검수한 heading 단위 등급 시드 id
   text                TEXT NOT NULL,
   security_level      INTEGER,            -- D0~D4, NULL=미분류(default-deny)
   confidence          REAL,
@@ -194,7 +197,7 @@ CREATE TABLE personas (
 - 그 외 → 후보 로드 후 `engine.decide()`로 A4 섹션 제외
 - (섹션 수가 커지면 `security_level <= clearance + 여유` 형태로 확장)
 
-> **호환성**: `store.py`가 반환하는 섹션 dict는 기존 `sections.json` 항목과 동일한 키 형태(`id, doc, doc_title, title, text, security_level, confidence, departments, keywords, summary_generalized, entities, needs_review`)를 유지한다. 그래야 `engine.decide()` / `pipeline.render_block()`을 수정 없이 재사용한다.
+> **호환성**: `store.py`가 반환하는 섹션 dict는 기존 `sections.json` 항목과 동일한 키 형태(`id, doc, doc_title, title, text, security_level, confidence, departments, keywords, summary_generalized, entities, needs_review`)를 유지하고, 추가로 `parent_title`, `source_section_id`를 제공한다. 그래야 `engine.decide()` / `pipeline.render_block()`을 수정 없이 재사용한다.
 
 ---
 
@@ -271,12 +274,12 @@ CREATE TABLE personas (
 대상은 **`data/samples/*.md` 4종뿐**이다(seed/·labels.json·sections.json 미사용). 중간 산출물(`labels.json → sections.json`) 없이 **`app/seed_db.py` 하나가 DB를 직접 채운다.**
 
 시딩 절차(`python -m app.seed_db` 1회 실행):
-1. `split_sections()`로 `data/samples/*.md` 파싱 → 각 섹션 `id = <파일stem>#<i>`, title, text 확보. (기존 `app/ingest.py`의 파서 재사용)
-2. `seed_db.py` 내 **등급 시드(GRADES)** 를 섹션 id로 병합 → security_level·confidence·keywords·departments·summary_generalized·entities(text/type). 라벨 없는 섹션은 D4 격리(default-deny).
+1. `split_semantic_sections()`로 `data/samples/*.md` 파싱 → `##` heading 아래 빈 줄로 분리된 문단을 독립 보안 객체로 저장. 각 row는 `id = <파일stem>#<chunk_i>`, `parent_title`, `source_section_id = <파일stem>#<heading_i>`, text를 갖는다.
+2. `seed_db.py` 내 **등급 시드(GRADES)** 를 `source_section_id`로 병합 → security_level·confidence·keywords·departments·summary_generalized·entities(text/type). 라벨 없는 heading은 해당 문단을 D4 격리(default-deny).
 3. `assign_placeholders()`로 엔티티 플레이스홀더를 **코퍼스 전역 일관** 부여. (기존 헬퍼 재사용, 시드에는 placeholder 미포함)
 4. 스키마 생성 후 documents/sections/entities/personas 테이블에 **직접 INSERT** (idempotent: `--reset`로 재생성).
 
-**등급 시드(GRADES) 작성:** Claude(개발단계)가 samples를 분석해 초안 작성 → 사람이 **발표 슬라이드 등급표와 대조·검토** → `seed_db.py`에 커밋. 이 파이썬 시드가 유일한 원천이자 재현 수단이며, git-diff로 등급 변경을 리뷰한다. **섹션 id는 반드시 `split_sections()` 출력에 맞춰 부여**한다(불일치 시 해당 섹션이 조용히 D4로 격리됨).
+**등급 시드(GRADES) 작성:** Claude(개발단계)가 samples를 분석해 초안 작성 → 사람이 **발표 슬라이드 등급표와 대조·검토** → `seed_db.py`에 커밋. 이 파이썬 시드가 유일한 원천이자 재현 수단이며, git-diff로 등급 변경을 리뷰한다. **등급 시드 id는 heading 단위 `source_section_id`에 맞춰 부여**하고, DB에는 그 아래 문단들이 독립 보안 객체로 저장된다(불일치 시 해당 문단들이 D4로 격리됨).
 
 > 재현성: DB 파일(`datakeeper.db`)은 산출물이므로 `.gitignore` 처리하고, `seed_db.py`(파서·헬퍼·등급 시드)만 커밋한다. 데모 전 `seed_db.py`를 1회 실행해 DB를 결정론적으로 생성.
 

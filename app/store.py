@@ -27,6 +27,8 @@ def _row_to_section(conn: sqlite3.Connection, r: sqlite3.Row) -> dict:
         "doc": r["doc"],
         "doc_title": r["doc_title"],
         "title": r["title"],
+        "parent_title": r["parent_title"],
+        "source_section_id": r["source_section_id"],
         "text": r["text"],
         "security_level": r["security_level"],
         "confidence": r["confidence"],

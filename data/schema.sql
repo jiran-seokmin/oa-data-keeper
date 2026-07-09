@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS sections (
     doc                 TEXT NOT NULL REFERENCES documents(doc),
     seq                 INTEGER NOT NULL,   -- 문서 내 순서
     title               TEXT NOT NULL,
+    parent_title        TEXT NOT NULL DEFAULT '',
+    source_section_id   TEXT NOT NULL DEFAULT '',
     text                TEXT NOT NULL,
     security_level      INTEGER,            -- D0~D4, NULL=미분류(default-deny)
     confidence          REAL,

@@ -1,5 +1,5 @@
 import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, CheckCircle2, FileText, Info, LoaderCircle, Lock, Sparkles, UploadCloud } from "lucide-react";
+import { ArrowUp, CheckCircle2, FileText, Info, LoaderCircle, Lock, Sparkles, Trash2, UploadCloud } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 /* ── 타입 ─────────────────────────────────────────────── */
@@ -122,6 +122,11 @@ async function postJson<T>(url: string, body: unknown, options: { timeoutMs?: nu
   if (!res.ok) throw new Error(await responseErrorMessage(res));
   return res.json() as Promise<T>;
 }
+async function deleteJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, { method: "DELETE" });
+  if (!res.ok) throw new Error(await responseErrorMessage(res));
+  return res.json() as Promise<T>;
+}
 
 async function responseErrorMessage(res: Response): Promise<string> {
   const text = await res.text();
@@ -169,8 +174,8 @@ function MarkdownAnswer({ children }: { children: string }) {
   );
 }
 
-function DocumentSidebar({ docs, activeDoc, onSelectDoc, onUpload, uploadStatus }: {
-  docs: DocView[]; activeDoc: DocView | null; onSelectDoc: (doc: string) => void; onUpload?: (file: File) => void; uploadStatus?: UploadStatus | null;
+function DocumentSidebar({ docs, activeDoc, onSelectDoc, onDeleteDoc, deletingDoc, onUpload, uploadStatus }: {
+  docs: DocView[]; activeDoc: DocView | null; onSelectDoc: (doc: string) => void; onDeleteDoc?: (doc: string) => void; deletingDoc?: string | null; onUpload?: (file: File) => void; uploadStatus?: UploadStatus | null;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUpload = uploadStatus && uploadStatus.stage !== "complete" && uploadStatus.stage !== "error";
@@ -203,6 +208,7 @@ function DocumentSidebar({ docs, activeDoc, onSelectDoc, onUpload, uploadStatus 
       {docs.map((d) => {
         const locked = d.sections.every((s) => s.kind === "blocked");
         const active = activeDoc?.doc === d.doc;
+        const deleting = deletingDoc === d.doc;
         return (
           <div key={d.doc} onClick={() => onSelectDoc(d.doc)}
             style={{ padding: "12px 14px", borderRadius: 8, cursor: "pointer", background: "#FFFFFF", border: active ? "1px solid #111827" : "1px solid #E5E7EB", boxShadow: active ? "0 0 0 1px #111827" : "0 1px 2px rgba(0,0,0,.04)", opacity: locked ? 0.68 : 1 }}>
@@ -211,6 +217,21 @@ function DocumentSidebar({ docs, activeDoc, onSelectDoc, onUpload, uploadStatus 
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{d.doc_title}</div>
                 <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 2 }}>{d.sections.length}개 섹션 · {d.dept_label}</div>
               </div>
+              {onDeleteDoc && (
+                <button
+                  type="button"
+                  className="dk-doc-delete"
+                  disabled={deleting}
+                  aria-label={`${d.doc_title} 삭제`}
+                  title="문서 삭제"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteDoc(d.doc);
+                  }}
+                >
+                  {deleting ? <LoaderCircle size={14} /> : <Trash2 size={14} />}
+                </button>
+              )}
               {locked && <Lock size={14} color="#9CA3AF" />}
             </div>
           </div>
@@ -272,6 +293,7 @@ export function App() {
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
+  const [deletingDoc, setDeletingDoc] = useState<string | null>(null);
 
   useEffect(() => {
     getJson<Persona[]>("/api/personas").then((data) => {
@@ -376,6 +398,32 @@ export function App() {
       });
     }
   }, [personaId]);
+  const deleteDocument = useCallback(async (doc: string) => {
+    const target = docs.find((d) => d.doc === doc);
+    const label = target?.doc_title ?? doc;
+    if (!window.confirm(`'${label}' 문서를 삭제할까요?\n관련 섹션 등급과 마스킹 엔티티도 DB에서 함께 삭제됩니다.`)) return;
+    setDeletingDoc(doc);
+    try {
+      await deleteJson<{ deleted: string; doc_title: string }>(`/api/documents/${encodeURIComponent(doc)}`);
+      const data = await getJson<{ docs: DocView[] }>(`/api/sections?persona_id=${personaId}`);
+      setDocs(data.docs);
+      setMatrix(null);
+      setDocId((cur) => {
+        if (cur !== doc) return cur;
+        return data.docs[0]?.doc ?? null;
+      });
+      setFocusSec(null);
+      setUploadStatus(null);
+    } catch (e) {
+      setUploadStatus({
+        stage: "error",
+        filename: label,
+        message: e instanceof Error ? e.message : "문서 삭제에 실패했습니다.",
+      });
+    } finally {
+      setDeletingDoc(null);
+    }
+  }, [docs, personaId]);
 
   const navItems: { id: View; label: string }[] = [
     { id: "grid", label: "판정 그리드" },
@@ -423,13 +471,13 @@ export function App() {
       </div>
 
       <main className="dk-main">
-        {view === "grid" && <GridView docs={docs} activeDoc={activeDoc} persona={persona} onSelectDoc={selectDoc} onOpen={openInViewer} onUpload={uploadDocument} uploadStatus={uploadStatus} />}
-        {view === "viewer" && <ViewerView docs={docs} activeDoc={activeDoc} persona={persona} focusSec={focusSec} onSelectDoc={selectDoc} onUpload={uploadDocument} uploadStatus={uploadStatus} />}
+        {view === "grid" && <GridView docs={docs} activeDoc={activeDoc} persona={persona} onSelectDoc={selectDoc} onOpen={openInViewer} onDeleteDoc={deleteDocument} deletingDoc={deletingDoc} onUpload={uploadDocument} uploadStatus={uploadStatus} />}
+        {view === "viewer" && <ViewerView docs={docs} activeDoc={activeDoc} persona={persona} focusSec={focusSec} onSelectDoc={selectDoc} onDeleteDoc={deleteDocument} deletingDoc={deletingDoc} onUpload={uploadDocument} uploadStatus={uploadStatus} />}
         {view === "chat" && (
           <ChatView persona={persona} chat={chat} loading={chatLoading} input={chatInput}
             onInput={setChatInput} onSend={() => send(chatInput)} onSuggest={send} />
         )}
-        {view === "matrix" && <MatrixView data={matrix} docs={docs} activeDoc={activeDoc} personaId={personaId} onPick={setPersonaId} onSelectDoc={selectDoc} onUpload={uploadDocument} uploadStatus={uploadStatus} />}
+        {view === "matrix" && <MatrixView data={matrix} docs={docs} activeDoc={activeDoc} personaId={personaId} onPick={setPersonaId} onSelectDoc={selectDoc} onDeleteDoc={deleteDocument} deletingDoc={deletingDoc} onUpload={uploadDocument} uploadStatus={uploadStatus} />}
       </main>
     </div>
   );
@@ -446,13 +494,13 @@ function ModeLegend() {
   );
 }
 
-function GridView({ docs, activeDoc, persona, onSelectDoc, onOpen, onUpload, uploadStatus }: {
-  docs: DocView[]; activeDoc: DocView | null; persona: Persona | null; onSelectDoc: (doc: string) => void; onOpen: (doc: string, sec: string) => void; onUpload: (file: File) => void; uploadStatus: UploadStatus | null;
+function GridView({ docs, activeDoc, persona, onSelectDoc, onOpen, onDeleteDoc, deletingDoc, onUpload, uploadStatus }: {
+  docs: DocView[]; activeDoc: DocView | null; persona: Persona | null; onSelectDoc: (doc: string) => void; onOpen: (doc: string, sec: string) => void; onDeleteDoc: (doc: string) => void; deletingDoc: string | null; onUpload: (file: File) => void; uploadStatus: UploadStatus | null;
 }) {
   const cols = "minmax(240px, 1.6fr) minmax(190px, 1fr) 150px 120px";
   return (
     <div style={{ display: "grid", gridTemplateColumns: "264px minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
-      <DocumentSidebar docs={docs} activeDoc={activeDoc} onSelectDoc={onSelectDoc} onUpload={onUpload} uploadStatus={uploadStatus} />
+      <DocumentSidebar docs={docs} activeDoc={activeDoc} onSelectDoc={onSelectDoc} onDeleteDoc={onDeleteDoc} deletingDoc={deletingDoc} onUpload={onUpload} uploadStatus={uploadStatus} />
       <div>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, marginBottom: 14, flexWrap: "wrap" }}>
           <div style={{ fontSize: 13, color: "#4B5563", maxWidth: 560 }}>
@@ -513,12 +561,12 @@ function GridCellBody({ sec }: { sec: SectionView }) {
 }
 
 /* ── 문서 뷰어 ───────────────────────────────────────── */
-function ViewerView({ docs, activeDoc, persona, focusSec, onSelectDoc, onUpload, uploadStatus }: {
-  docs: DocView[]; activeDoc: DocView | null; persona: Persona | null; focusSec: string | null; onSelectDoc: (doc: string) => void; onUpload: (file: File) => void; uploadStatus: UploadStatus | null;
+function ViewerView({ docs, activeDoc, persona, focusSec, onSelectDoc, onDeleteDoc, deletingDoc, onUpload, uploadStatus }: {
+  docs: DocView[]; activeDoc: DocView | null; persona: Persona | null; focusSec: string | null; onSelectDoc: (doc: string) => void; onDeleteDoc: (doc: string) => void; deletingDoc: string | null; onUpload: (file: File) => void; uploadStatus: UploadStatus | null;
 }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "264px minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
-      <DocumentSidebar docs={docs} activeDoc={activeDoc} onSelectDoc={onSelectDoc} onUpload={onUpload} uploadStatus={uploadStatus} />
+      <DocumentSidebar docs={docs} activeDoc={activeDoc} onSelectDoc={onSelectDoc} onDeleteDoc={onDeleteDoc} deletingDoc={deletingDoc} onUpload={onUpload} uploadStatus={uploadStatus} />
 
       <div className="dk-card" style={{ padding: "20px 28px 8px" }}>
         {activeDoc && (
@@ -699,14 +747,14 @@ function ChatView({ persona, chat, loading, input, onInput, onSend, onSuggest }:
 }
 
 /* ── 매트릭스 ────────────────────────────────────────── */
-function MatrixView({ data, docs, activeDoc, personaId, onPick, onSelectDoc, onUpload, uploadStatus }: {
-  data: { personas: Persona[]; rows: MatrixRow[] } | null; docs: DocView[]; activeDoc: DocView | null; personaId: string; onPick: (id: string) => void; onSelectDoc: (doc: string) => void; onUpload: (file: File) => void; uploadStatus: UploadStatus | null;
+function MatrixView({ data, docs, activeDoc, personaId, onPick, onSelectDoc, onDeleteDoc, deletingDoc, onUpload, uploadStatus }: {
+  data: { personas: Persona[]; rows: MatrixRow[] } | null; docs: DocView[]; activeDoc: DocView | null; personaId: string; onPick: (id: string) => void; onSelectDoc: (doc: string) => void; onDeleteDoc: (doc: string) => void; deletingDoc: string | null; onUpload: (file: File) => void; uploadStatus: UploadStatus | null;
 }) {
   const rows = data?.rows.filter((row) => row.doc === activeDoc?.doc) ?? [];
   const cols = data ? `minmax(230px,1.4fr) repeat(${data.personas.length}, minmax(110px,1fr))` : "";
   return (
     <div style={{ display: "grid", gridTemplateColumns: "264px minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
-      <DocumentSidebar docs={docs} activeDoc={activeDoc} onSelectDoc={onSelectDoc} onUpload={onUpload} uploadStatus={uploadStatus} />
+      <DocumentSidebar docs={docs} activeDoc={activeDoc} onSelectDoc={onSelectDoc} onDeleteDoc={onDeleteDoc} deletingDoc={deletingDoc} onUpload={onUpload} uploadStatus={uploadStatus} />
       <div>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, marginBottom: 14, flexWrap: "wrap" }}>
           <div style={{ fontSize: 13, color: "#4B5563" }}>문서함에서 선택한 문서의 섹션 × 전 페르소나 판정 히트맵입니다. 열 머리글이나 셀을 누르면 해당 페르소나로 전환됩니다.</div>

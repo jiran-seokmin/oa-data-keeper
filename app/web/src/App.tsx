@@ -32,7 +32,7 @@ type SectionView = {
 };
 type DocView = { doc: string; doc_title: string; dept_label: string; sections: SectionView[] };
 type MatrixCell = { persona_id: string; mode: number; mode_name: string; reason: string };
-type MatrixRow = { id: string; doc_title: string; title: string; d: number; cells: MatrixCell[] };
+type MatrixRow = { id: string; doc: string; doc_title: string; title: string; d: number; cells: MatrixCell[] };
 type RetrievalResult = {
   id: string;
   doc: string;
@@ -138,6 +138,41 @@ function MarkdownAnswer({ children }: { children: string }) {
   return (
     <div className="dk-markdown">
       <ReactMarkdown>{children}</ReactMarkdown>
+    </div>
+  );
+}
+
+function DocumentSidebar({ docs, activeDoc, onSelectDoc }: { docs: DocView[]; activeDoc: DocView | null; onSelectDoc: (doc: string) => void }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", padding: "0 2px" }}>문서함</div>
+      {docs.map((d) => {
+        const locked = d.sections.every((s) => s.kind === "blocked");
+        const active = activeDoc?.doc === d.doc;
+        return (
+          <div key={d.doc} onClick={() => onSelectDoc(d.doc)}
+            style={{ padding: "12px 14px", borderRadius: 8, cursor: "pointer", background: "#FFFFFF", border: active ? "1px solid #111827" : "1px solid #E5E7EB", boxShadow: active ? "0 0 0 1px #111827" : "0 1px 2px rgba(0,0,0,.04)", opacity: locked ? 0.68 : 1 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{d.doc_title}</div>
+                <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 2 }}>{d.sections.length}개 섹션 · {d.dept_label}</div>
+              </div>
+              {locked && <Lock size={14} color="#9CA3AF" />}
+            </div>
+          </div>
+        );
+      })}
+      <div style={{ marginTop: 8, padding: 14, borderRadius: 8, background: "#FFFFFF", border: "1px solid #E5E7EB" }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", marginBottom: 8 }}>접근 모드</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {[0, 1, 2, 3, 4].map((m) => (
+            <div key={m} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <span style={chip(MODES[m])}>A{m}</span>
+              <span style={{ fontSize: 11.5, color: "#4B5563" }}>{MODES[m].desc}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -272,13 +307,13 @@ export function App() {
       </div>
 
       <main className="dk-main">
-        {view === "grid" && <GridView docs={docs} persona={persona} onOpen={openInViewer} />}
+        {view === "grid" && <GridView docs={docs} activeDoc={activeDoc} persona={persona} onSelectDoc={(d) => { setDocId(d); setFocusSec(null); }} onOpen={openInViewer} />}
         {view === "viewer" && <ViewerView docs={docs} activeDoc={activeDoc} persona={persona} focusSec={focusSec} onSelectDoc={(d) => { setDocId(d); setFocusSec(null); }} />}
         {view === "chat" && (
           <ChatView persona={persona} chat={chat} loading={chatLoading} input={chatInput}
             onInput={setChatInput} onSend={() => send(chatInput)} onSuggest={send} />
         )}
-        {view === "matrix" && <MatrixView data={matrix} personaId={personaId} onPick={setPersonaId} />}
+        {view === "matrix" && <MatrixView data={matrix} docs={docs} activeDoc={activeDoc} personaId={personaId} onPick={setPersonaId} onSelectDoc={(d) => { setDocId(d); setFocusSec(null); }} />}
       </main>
     </div>
   );
@@ -295,28 +330,32 @@ function ModeLegend() {
   );
 }
 
-function GridView({ docs, persona, onOpen }: { docs: DocView[]; persona: Persona | null; onOpen: (doc: string, sec: string) => void }) {
+function GridView({ docs, activeDoc, persona, onSelectDoc, onOpen }: {
+  docs: DocView[]; activeDoc: DocView | null; persona: Persona | null; onSelectDoc: (doc: string) => void; onOpen: (doc: string, sec: string) => void;
+}) {
   const cols = "minmax(240px, 1.6fr) minmax(190px, 1fr) 150px 120px";
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, marginBottom: 14, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 13, color: "#4B5563", maxWidth: 560 }}>
-          문단(섹션) 단위 분류 산출물과 <strong style={{ color: "#111827", fontWeight: 600 }}>{persona?.name} (C{persona?.clearance} · {persona?.department ?? "미인증"})</strong> 기준 판정입니다. 행을 누르면 문서 뷰어로 이동합니다.
+    <div style={{ display: "grid", gridTemplateColumns: "264px minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
+      <DocumentSidebar docs={docs} activeDoc={activeDoc} onSelectDoc={onSelectDoc} />
+      <div>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, marginBottom: 14, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 13, color: "#4B5563", maxWidth: 560 }}>
+            문서함에서 선택한 문서의 문단(섹션) 단위 분류 산출물과 <strong style={{ color: "#111827", fontWeight: 600 }}>{persona?.name} (C{persona?.clearance} · {persona?.department ?? "미인증"})</strong> 기준 판정입니다. 행을 누르면 문서 뷰어로 이동합니다.
+          </div>
+          <ModeLegend />
         </div>
-        <ModeLegend />
-      </div>
-      {docs.map((doc) => (
-        <div key={doc.doc} className="dk-card" style={{ marginBottom: 16, overflow: "hidden" }}>
+        {activeDoc ? (
+          <div className="dk-card" style={{ overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: "1px solid #F3F4F6" }}>
             <FileText size={16} color="#6B7280" />
-            <span style={{ fontSize: 14, fontWeight: 600, color: "#111827", letterSpacing: "-0.02em" }}>{doc.doc_title}</span>
-            <span style={{ padding: "1px 8px", borderRadius: 5, fontSize: 11, fontWeight: 500, background: "#F3F4F6", color: "#4B5563" }}>{doc.dept_label}</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: "#111827", letterSpacing: "-0.02em" }}>{activeDoc.doc_title}</span>
+            <span style={{ padding: "1px 8px", borderRadius: 5, fontSize: 11, fontWeight: 500, background: "#F3F4F6", color: "#4B5563" }}>{activeDoc.dept_label}</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: cols, columnGap: 16, padding: "8px 16px", fontSize: 11, fontWeight: 600, color: "#9CA3AF", borderBottom: "1px solid #F3F4F6", background: "#F9FAFB" }}>
             <div>데이터 원문</div><div>요약 (A2 일반화)</div><div>키워드</div><div>보안 등급</div>
           </div>
-          {doc.sections.map((sec) => (
-            <div key={sec.id} onClick={() => onOpen(doc.doc, sec.id)}
+          {activeDoc.sections.map((sec) => (
+            <div key={sec.id} onClick={() => onOpen(activeDoc.doc, sec.id)}
               style={{ display: "grid", gridTemplateColumns: cols, columnGap: 16, padding: "14px 16px", borderBottom: "1px solid #F3F4F6", cursor: "pointer", alignItems: "start", opacity: sec.kind === "blocked" ? 0.62 : 1 }}>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", marginBottom: 4, display: "flex", gap: 6, alignItems: "center" }}>
@@ -333,8 +372,11 @@ function GridView({ docs, persona, onOpen }: { docs: DocView[]; persona: Persona
               <div><DBadge d={sec.d} /><div style={{ fontSize: 10.5, color: "#9CA3AF", marginTop: 3 }}>{sec.d_name}</div></div>
             </div>
           ))}
-        </div>
-      ))}
+          </div>
+        ) : (
+          <div className="dk-card" style={{ padding: 24, color: "#9CA3AF", fontSize: 13 }}>표시할 문서가 없습니다.</div>
+        )}
+      </div>
     </div>
   );
 }
@@ -360,36 +402,7 @@ function ViewerView({ docs, activeDoc, persona, focusSec, onSelectDoc }: {
 }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "264px minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", padding: "0 2px" }}>문서함</div>
-        {docs.map((d) => {
-          const locked = d.sections.every((s) => s.kind === "blocked");
-          const active = activeDoc?.doc === d.doc;
-          return (
-            <div key={d.doc} onClick={() => onSelectDoc(d.doc)}
-              style={{ padding: "12px 14px", borderRadius: 8, cursor: "pointer", background: "#FFFFFF", border: active ? "1px solid #111827" : "1px solid #E5E7EB", boxShadow: active ? "0 0 0 1px #111827" : "0 1px 2px rgba(0,0,0,.04)", opacity: locked ? 0.68 : 1 }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{d.doc_title}</div>
-                  <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 2 }}>{d.sections.length}개 섹션 · {d.dept_label}</div>
-                </div>
-                {locked && <Lock size={14} color="#9CA3AF" />}
-              </div>
-            </div>
-          );
-        })}
-        <div style={{ marginTop: 8, padding: 14, borderRadius: 8, background: "#FFFFFF", border: "1px solid #E5E7EB" }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", marginBottom: 8 }}>접근 모드</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {[0, 1, 2, 3, 4].map((m) => (
-              <div key={m} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <span style={chip(MODES[m])}>A{m}</span>
-                <span style={{ fontSize: 11.5, color: "#4B5563" }}>{MODES[m].desc}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <DocumentSidebar docs={docs} activeDoc={activeDoc} onSelectDoc={onSelectDoc} />
 
       <div className="dk-card" style={{ padding: "20px 28px 8px" }}>
         {activeDoc && (
@@ -527,16 +540,30 @@ function ChatView({ persona, chat, loading, input, onInput, onSend, onSuggest }:
 }
 
 /* ── 매트릭스 ────────────────────────────────────────── */
-function MatrixView({ data, personaId, onPick }: { data: { personas: Persona[]; rows: MatrixRow[] } | null; personaId: string; onPick: (id: string) => void }) {
-  if (!data) return <div style={{ color: "#9CA3AF", fontSize: 13 }}>불러오는 중…</div>;
-  const cols = `minmax(230px,1.4fr) repeat(${data.personas.length}, minmax(110px,1fr))`;
+function MatrixView({ data, docs, activeDoc, personaId, onPick, onSelectDoc }: {
+  data: { personas: Persona[]; rows: MatrixRow[] } | null; docs: DocView[]; activeDoc: DocView | null; personaId: string; onPick: (id: string) => void; onSelectDoc: (doc: string) => void;
+}) {
+  const rows = data?.rows.filter((row) => row.doc === activeDoc?.doc) ?? [];
+  const cols = data ? `minmax(230px,1.4fr) repeat(${data.personas.length}, minmax(110px,1fr))` : "";
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 14, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 13, color: "#4B5563" }}>전 섹션 × 전 페르소나 판정 히트맵입니다. 열 머리글이나 셀을 누르면 해당 페르소나로 전환됩니다.</div>
-        <ModeLegend />
-      </div>
-      <div className="dk-card" style={{ overflow: "hidden" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "264px minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
+      <DocumentSidebar docs={docs} activeDoc={activeDoc} onSelectDoc={onSelectDoc} />
+      <div>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, marginBottom: 14, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 13, color: "#4B5563" }}>문서함에서 선택한 문서의 섹션 × 전 페르소나 판정 히트맵입니다. 열 머리글이나 셀을 누르면 해당 페르소나로 전환됩니다.</div>
+          <ModeLegend />
+        </div>
+        {!data ? (
+          <div className="dk-card" style={{ padding: 24, color: "#9CA3AF", fontSize: 13 }}>불러오는 중…</div>
+        ) : (
+          <div className="dk-card" style={{ overflow: "hidden" }}>
+        {activeDoc && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: "1px solid #F3F4F6" }}>
+            <FileText size={16} color="#6B7280" />
+            <span style={{ fontSize: 14, fontWeight: 600, color: "#111827", letterSpacing: "-0.02em" }}>{activeDoc.doc_title}</span>
+            <span style={{ padding: "1px 8px", borderRadius: 5, fontSize: 11, fontWeight: 500, background: "#F3F4F6", color: "#4B5563" }}>{rows.length}개 섹션</span>
+          </div>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: cols, background: "#F9FAFB" }}>
           <div style={{ padding: "12px 16px", fontSize: 11, fontWeight: 600, color: "#9CA3AF", borderBottom: "1px solid #F3F4F6", display: "flex", alignItems: "flex-end" }}>섹션 · 보안 등급</div>
           {data.personas.map((p) => (
@@ -547,7 +574,7 @@ function MatrixView({ data, personaId, onPick }: { data: { personas: Persona[]; 
             </div>
           ))}
         </div>
-        {data.rows.map((row) => (
+        {rows.map((row) => (
           <div key={row.id} style={{ display: "grid", gridTemplateColumns: cols, borderBottom: "1px solid #F3F4F6", alignItems: "center" }}>
             <div style={{ padding: "10px 16px" }}>
               <div style={{ fontSize: 10.5, color: "#9CA3AF" }}>{row.doc_title}</div>
@@ -564,6 +591,9 @@ function MatrixView({ data, personaId, onPick }: { data: { personas: Persona[]; 
             ))}
           </div>
         ))}
+        {rows.length === 0 && <div style={{ padding: 24, color: "#9CA3AF", fontSize: 13 }}>선택된 문서의 매트릭스 행이 없습니다.</div>}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -103,7 +103,7 @@ C3×인수검토 칸(A1 노출 제한)이 P1 LLM 답변의 백미다: **AI가 �
 data/samples/*.md (4종)          app/seed_db.py 내 등급 시드(GRADES, 커밋·검토됨)
       │                                 │
       └──────────────┬──────────────────┘
-                     ▼  app/seed_db.py 직접 시딩 (samples 파싱 + 등급 병합 + 플레이스홀더 → INSERT. 런타임 LLM 없음)
+                     ▼  app.init_samples 명시 실행 (samples 파싱 + 등급 병합 + 플레이스홀더 → INSERT. 런타임 LLM 없음)
   SQLite  datakeeper.db
    ├─ documents(문서)
    ├─ sections(섹션 + D등급·요약·키워드·부서·신뢰도·검수)
@@ -271,17 +271,17 @@ CREATE TABLE personas (
 
 ## 10. 데이터 준비 — samples 직접 DB 시딩 (samples만)
 
-대상은 **`data/samples/*.md` 4종뿐**이다(seed/·labels.json·sections.json 미사용). 중간 산출물(`labels.json → sections.json`) 없이 **`app/seed_db.py` 하나가 DB를 직접 채운다.**
+대상은 **`data/samples/*.md` 4종뿐**이다(seed/·labels.json·sections.json 미사용). 중간 산출물(`labels.json → sections.json`) 없이 **`app.init_samples` 명령이 `app/seed_db.py`의 정적 시드를 사용해 DB를 채운다.**
 
-시딩 절차(`python -m app.seed_db` 1회 실행):
+시딩 절차(`python -m app.init_samples --reset` 명시 실행):
 1. `split_semantic_sections()`로 `data/samples/*.md` 파싱 → `##` heading 아래 빈 줄로 분리된 문단을 독립 보안 객체로 저장. 각 row는 `id = <파일stem>#<chunk_i>`, `parent_title`, `source_section_id = <파일stem>#<heading_i>`, text를 갖는다.
 2. `seed_db.py` 내 **등급 시드(GRADES)** 를 `source_section_id`로 병합 → security_level·confidence·keywords·departments·summary_generalized·entities(text/type). 라벨 없는 heading은 해당 문단을 D4 격리(default-deny).
 3. `assign_placeholders()`로 엔티티 플레이스홀더를 **코퍼스 전역 일관** 부여. (기존 헬퍼 재사용, 시드에는 placeholder 미포함)
-4. 스키마 생성 후 documents/sections/entities/personas 테이블에 **직접 INSERT** (idempotent: `--reset`로 재생성).
+4. 스키마 생성 후 documents/sections/entities/personas 테이블에 **직접 INSERT** (`--reset` 명령으로 재생성).
 
 **등급 시드(GRADES) 작성:** Claude(개발단계)가 samples를 분석해 초안 작성 → 사람이 **발표 슬라이드 등급표와 대조·검토** → `seed_db.py`에 커밋. 이 파이썬 시드가 유일한 원천이자 재현 수단이며, git-diff로 등급 변경을 리뷰한다. **등급 시드 id는 heading 단위 `source_section_id`에 맞춰 부여**하고, DB에는 그 아래 문단들이 독립 보안 객체로 저장된다(불일치 시 해당 문단들이 D4로 격리됨).
 
-> 재현성: DB 파일(`datakeeper.db`)은 산출물이므로 `.gitignore` 처리하고, `seed_db.py`(파서·헬퍼·등급 시드)만 커밋한다. 데모 전 `seed_db.py`를 1회 실행해 DB를 결정론적으로 생성.
+> 재현성: DB 파일(`datakeeper.db`)은 산출물이므로 `.gitignore` 처리하고, `seed_db.py`(파서·헬퍼·등급 시드)와 `init_samples.py`(명시 초기화 CLI)만 커밋한다. 서버 실행만으로 samples는 DB에 반영되지 않으며, 데모 전 `python -m app.init_samples --reset`을 1회 실행해 DB를 결정론적으로 생성.
 
 **등급 배치(초안, 발표 슬라이드 기준으로 검토 필요):**
 - `ai_sales_strategy_report.md`: 개요 D0 · 파이프라인 D2 · 계약규모 D2/D3 · 가격전략 D3 · 인수검토 **D4** · 재무전망 D3
@@ -319,7 +319,7 @@ CREATE TABLE personas (
 
 | 단계 | 내용 | 산출물 |
 |---|---|---|
-| M1 데이터 계층 | samples 등급 시드 → `seed_db.py` 직접 시딩, store.py | `app/seed_db.py`, `datakeeper.db`, `app/store.py` |
+| M1 데이터 계층 | samples 등급 시드 → `init_samples` 명시 초기화, store.py | `app/seed_db.py`, `app/init_samples.py`, `datakeeper.db`, `app/store.py` |
 | M2 검색·조회 (P0) | 접근제어 키워드 검색 로직 + 회귀 테스트 | `app/retrieval.py`, 통과하는 `tests/` |
 | M3 API | FastAPI 검색/페르소나/문서 엔드포인트 | `app/server.py` (`/api/search`) |
 | M4 프론트 (P0) | 페르소나 셀렉터 + 검색 챗 UI + 판정 근거 | `app/web/` |

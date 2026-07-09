@@ -1,6 +1,7 @@
 """SQLite 접속·초기화 헬퍼.
 
-DB(datakeeper.db)는 산출물이며 seed_db.py로 재생성한다 (.gitignore 대상).
+DB(datakeeper.db)는 산출물이며 `python -m app.init_samples --reset`으로 재생성한다
+(.gitignore 대상).
 """
 
 from __future__ import annotations

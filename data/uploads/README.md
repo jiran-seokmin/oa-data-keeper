@@ -7,4 +7,4 @@
 - 시딩 대상 기본 코퍼스(`data/samples/`)와 달리 GRADES 등급 시드가 필요 없다.
 - 모든 회사명, 인명, 금액, 일정, 계약 조건은 데모용 가상 데이터다.
 - 업로드로 추가된 문서는 문서함의 삭제 버튼 또는 `DELETE /api/documents/{doc}`으로 제거할 수 있고,
-  `python -m app.seed_db --reset`으로도 기본 코퍼스만 남게 초기화된다.
+  `python -m app.init_samples --reset`으로도 기본 코퍼스만 남게 초기화된다.

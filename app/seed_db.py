@@ -1,9 +1,9 @@
-"""samples 직접 DB 시딩 — data/samples/*.md → SQLite (datakeeper.db)
+"""samples 직접 DB 시딩 내부 모듈 — data/samples/*.md → SQLite (datakeeper.db)
 
-중간 산출물 없이 이 스크립트 하나가 DB를 직접 채운다.
+중간 산출물 없이 samples를 DB로 변환하는 함수들을 제공한다.
 
-  python -m app.seed_db --report    # A1 검증: 등급 시드 병합 결과·미매칭 점검 (DB 미생성)
-  python -m app.seed_db --reset     # 스키마 재생성 후 samples를 SQLite에 직접 시딩
+  python -m app.init_samples --reset  # 명시적 샘플 초기화: samples → SQLite
+  python -m app.seed_db --report      # 등급 시드 병합 결과·미매칭 점검 (DB 미생성)
 
 등급 시드(GRADES)는 Claude 개발단계 분석을 사람이 발표 슬라이드 등급표와 대조·검토해 커밋한
 정적 데이터다(런타임 LLM 없음). 섹션 id는 반드시 split_semantic_sections() 출력에 맞춘다 —
@@ -489,21 +489,31 @@ def report() -> int:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="samples 직접 DB 시딩")
+    parser = argparse.ArgumentParser(description="samples 등급 시드 검증 도구")
     parser.add_argument("--report", action="store_true", help="등급 병합 결과·미매칭 점검 (DB 미생성)")
-    parser.add_argument("--reset", action="store_true", help="스키마 재생성 후 samples 시딩 (A3에서 구현)")
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="사용 중단: 샘플 초기화는 `python -m app.init_samples --reset`을 사용",
+    )
     args = parser.parse_args()
 
     if args.report:
         raise SystemExit(report())
 
-    stats = seed()
-    print(f"시딩 완료: {DB_PATH}")
-    print(f"  documents={stats['documents']} sections={stats['sections']} "
-          f"entities={stats['entities']} personas={stats['personas']}")
-    if stats["missing"]:
-        print(f"⚠ GRADES 미지정(→D4 격리): {stats['missing']}", file=sys.stderr)
-        raise SystemExit(1)
+    if args.reset:
+        print(
+            "samples 초기화는 명시적 초기화 명령에서만 실행됩니다:\n"
+            "  python -m app.init_samples --reset",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+
+    parser.print_help()
+    print(
+        "\nDB 쓰기 작업은 수행하지 않았습니다. samples를 DB에 넣으려면 "
+        "`python -m app.init_samples --reset`을 실행하세요."
+    )
 
 
 if __name__ == "__main__":

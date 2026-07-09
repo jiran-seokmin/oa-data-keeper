@@ -7,7 +7,7 @@
 범례: `[ ]` 미착수 · `[~]` 진행 · `[x]` 완료
 
 > **구현 현황 (2026-07-09):** Phase A~D + G3 완료·main 머지(커밋 `76bff0f`). 무-LLM 접근제어 검색 챗 동작.
-> 실행: `python -m app.seed_db --reset` → `uvicorn app.server:app --port 8000` → 브라우저에서 페르소나 전환·검색.
+> 실행: `python -m app.init_samples --reset` → `uvicorn app.server:app --port 8000` → 브라우저에서 페르소나 전환·검색.
 > 검증: `python tests/test_engine.py`, `python tests/test_retrieval.py` 통과. Playwright로 C2 마스킹·C3 노출제한 렌더 확인.
 > 남은 것: **Phase E(LLM 답변 레이어 · P1)**, Phase F(뷰어/매트릭스/감사로그 · P2).
 
@@ -19,7 +19,7 @@
 ## Phase A — 데이터 계층 (SQLite 직접 시딩, samples만) · P0
 
 > 방침: **DB에는 `data/samples/*.md` 4종만** 넣는다. (구 `data/seed/`·`labels.json`·`sections.json`은 2026-07-09 레거시 정리로 삭제됨.)
-> **중간 산출물 없이 `app/seed_db.py` 하나가 DB를 직접 채운다.**
+> **중간 산출물 없이 `app.init_samples` 명령이 `app/seed_db.py`의 정적 시드를 사용해 DB를 채운다.**
 
 ### A1. samples 등급 시드 작성 — P0 · M
 - [ ] `split_sections()`를 `data/samples/*.md`에 먼저 돌려 실제 섹션 `id = <stem>#<i>`·title·text 확보 (손으로 인덱싱 금지 — 불일치 시 조용히 D4 격리)
@@ -35,10 +35,10 @@
 - 산출물: `data/schema.sql`, `app/db.py`
 - 의존성: 없음 (A1과 병행 가능)
 
-### A3. 직접 시딩 스크립트 (seed_db.py) — P0 · M
+### A3. 명시적 샘플 초기화 CLI (init_samples.py) — P0 · M
 - [ ] `app/seed_db.py`: `split_sections()`(samples 파싱) → `GRADES` 병합(라벨 없으면 D4 격리) → `assign_placeholders()`(코퍼스 전역 일관) → 스키마 생성 → documents/sections/entities에 **직접 INSERT**
 - [ ] `app/personas.yaml` → `personas` 테이블 시딩
-- [ ] `python -m app.seed_db [--reset]` idempotent 실행, 미매칭 섹션 경고 출력
+- [ ] `python -m app.init_samples --reset` 명시 실행, 미매칭 섹션 경고 출력
 - [ ] `ingest.py`의 `assign_placeholders`는 import 재사용(중복 구현 금지), 파싱은 문단 단위 `split_semantic_sections`(seed_db 자체 구현), 대상 디렉터리는 `data/samples`
 - 산출물: 생성되는 `datakeeper.db`, 재생성 명령
 - 검증: `SELECT count(*)` 섹션 수, 엔티티 placeholder 일관성, 미매칭 0건
@@ -207,10 +207,11 @@ P0만으로 "같은 질문, 등급별 다른 조회 결과 + 판정 근거"가 �
 - Streamlit UI의 렌더링 규칙(`render_section`, `masked_html`)·색상 팔레트 — 웹 이식 시 참고
 
 ## 신규 파일 (요약)
-- `app/seed_db.py` — samples 직접 시딩 + `GRADES` 등급 시드 (A1·A3)
+- `app/seed_db.py` — samples 파싱 + `GRADES` 등급 시드 내부 모듈 (A1·A3)
+- `app/init_samples.py` — samples 명시 초기화 CLI
 - `app/db.py`, `data/schema.sql` — 스키마·접속 (A2)
 - `app/store.py` — DB 접근 계층 (A4)
 - `app/retrieval.py` — 접근제어 키워드 검색 (B1)
 - `app/server.py` — FastAPI (C)
 - `app/web/{index.html,app.js,style.css}` — 프론트 (D)
-- `datakeeper.db` — 산출물, **.gitignore** (seed_db.py로 재생성)
+- `datakeeper.db` — 산출물, **.gitignore** (`python -m app.init_samples --reset`으로 재생성)

@@ -13,10 +13,14 @@
 uv venv .venv
 uv pip install -r requirements.txt --python .venv/bin/python
 
-# 1) 샘플 DB 초기화 (명시적으로 실행할 때만 data/samples 반영, LLM/API 불필요)
+# 1) .env 설정 (서비스 실행 시 필수)
+cp .env.example .env
+# .env 파일에 GEMINI_API_KEY 값을 입력
+
+# 2) 샘플 DB 초기화 (명시적으로 실행할 때만 data/samples 반영, LLM/API 불필요)
 .venv/bin/python -m app.init_samples --reset
 
-# 2) assistant-ui 기반 웹 챗
+# 3) assistant-ui 기반 웹 챗
 cd app/web && npm install && npm run build && cd ../..
 .venv/bin/uvicorn app.server:app --reload --port 8000
 
@@ -29,7 +33,7 @@ cd app/web && npm install && npm run build && cd ../..
 - **MVP 데모(문서 뷰어, 판정 매트릭스)는 API 호출 없이 결정론적으로 동작**한다.
 - 등급은 `app/seed_db.py`의 `GRADES`(개발단계 Claude 분석을 사람이 검토·커밋한 정적 시드)에서 나온다. 샘플 문서를 수정하면 GRADES도 함께 갱신하고 `python -m app.init_samples --report`로 미매칭을 점검한다.
 - 서버 실행만으로는 `data/samples` 문서를 DB에 넣거나 보안 등급 분류하지 않는다. 샘플 반영은 `python -m app.init_samples --reset`을 명시적으로 실행할 때만 수행한다.
-- Phase E LLM 답변 모드(`/api/chat`)는 `.env` 또는 쉘 환경변수로 API 키가 필요하다. 키가 없거나 모델 호출이 실패하면 웹 FE가 자동으로 `/api/search` 조회 모드로 폴백한다.
+- **서비스 실행 시 `.env` 설정(API 키)은 필수다.** Phase E LLM 답변 모드(`/api/chat`)가 `.env` 또는 쉘 환경변수의 API 키를 사용하며, 키가 없거나 모델 호출이 실패하면 웹 FE가 자동으로 `/api/search` 조회 모드로 폴백한다.
 - 기본 provider는 Gemini다. `GEMINI_API_KEY` 또는 `GOOGLE_API_KEY`를 설정하면 Gemini SDK가 자동으로 사용한다.
 - 모델 변경: `ACE_MODEL` (Gemini 기본 `gemini-3.5-flash`, Anthropic 기본 `claude-opus-4-8`).
 

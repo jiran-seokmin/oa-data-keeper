@@ -1,860 +1,368 @@
 [
   {
-    "title": "제품 개요",
-    "text": "세이프브레인은 가온테크가 개발한 팀 지식 AI 어시스턴트입니다. 팀 노트, 문서함, 챗 데이터를 하나의 지식 베이스로 통합하고, 데이터 보안 등급과 사용자 접근 등급을 실시간으로 판정하는 접근 제어 엔진을 내장하고 있습니다. 하나의 지식봇으로 내부 구성원과 외부 고객을 동시에 서비스할 수 있습니다.",
-    "id": "01_product_intro#0",
-    "doc": "01_product_intro",
-    "doc_title": "세이프브레인 제품 소개 (공개 자료)",
-    "security_level": 0,
-    "confidence": 0.98,
-    "departments": [],
-    "keywords": [
-      "공개 자료",
-      "제품 소개"
-    ],
-    "summary_generalized": "회사의 팀 지식 AI 제품에 대한 공개 소개 자료.",
-    "entities": [],
-    "needs_review": false
-  },
-  {
-    "title": "주요 기능",
-    "text": "섹션 단위 보안 등급 분류, 5단계 접근 모드(차단·마스킹·의미 제한·노출 제한·전체 접근), 감사 로그, 관리자 등급 검수 도구를 제공합니다. 온프레미스와 클라우드 환경 모두 지원합니다.",
-    "id": "01_product_intro#1",
-    "doc": "01_product_intro",
-    "doc_title": "세이프브레인 제품 소개 (공개 자료)",
-    "security_level": 0,
-    "confidence": 0.98,
-    "departments": [],
-    "keywords": [
-      "공개 자료"
-    ],
-    "summary_generalized": "제품의 주요 기능에 대한 공개 설명.",
-    "entities": [],
-    "needs_review": false
-  },
-  {
-    "title": "도입 문의",
-    "text": "도입 문의는 공식 홈페이지 또는 sales@gaontech.example로 연락 주시기 바랍니다. 2주 무료 PoC 프로그램을 운영하고 있습니다.",
-    "id": "01_product_intro#2",
-    "doc": "01_product_intro",
-    "doc_title": "세이프브레인 제품 소개 (공개 자료)",
-    "security_level": 0,
-    "confidence": 0.98,
-    "departments": [],
-    "keywords": [
-      "공개 자료"
-    ],
-    "summary_generalized": "제품 도입 문의 채널 안내(공개).",
-    "entities": [],
-    "needs_review": false
-  },
-  {
-    "title": "도입 발표",
-    "text": "가온테크는 유통 전문기업 청솔유통이 팀 지식 AI 어시스턴트 '세이프브레인'을 전사 도입했다고 12일 밝혔다. 청솔유통은 전 직원 800명이 사용하는 사내 지식봇과 협력사 대상 외부 지식봇을 단일 엔진으로 운영하게 된다.",
-    "id": "02_press_release#0",
-    "doc": "02_press_release",
-    "doc_title": "보도자료 — 청솔유통 세이프브레인 도입 (2026-05-12)",
+    "title": "1. 회사 및 사업 개요",
+    "text": "지란지교소프트는 기업용 보안·협업 솔루션 전문 기업으로, 2024년부터 기업용 AI 사업을 신성장 동력으로 육성하고 있다. 핵심 기술은 데이터 보안 등급과 사용자 접근 등급을 실시간으로 판정하는 접근 제어 엔진 'DataKeeper'이며, 팀 노트·문서함·챗 데이터를 하나의 지식 베이스로 통합하면서도 보는 사람에 따라 정보 노출을 차등 제어하는 것이 특징이다. 본 보고서는 2026년 상반기 실적과 하반기 전략을 정리한 것이다.",
+    "id": "01_ai_business_report#0",
+    "doc": "01_ai_business_report",
+    "doc_title": "AI 사업 현황 및 향후 전략 보고서 (2026년 7월)",
     "security_level": 0,
     "confidence": 0.97,
     "departments": [],
     "keywords": [
-      "보도자료"
+      "공개 자료",
+      "회사 개요"
     ],
-    "summary_generalized": "고객사의 제품 전사 도입을 알리는 공개 보도자료.",
+    "summary_generalized": "기업용 보안·협업 솔루션 기업이 접근 제어 엔진 기반 AI 사업을 육성 중이라는 공개 수준의 소개.",
     "entities": [],
     "needs_review": false
   },
   {
-    "title": "회사 소개",
-    "text": "가온테크는 2023년 설립된 AI 보안 솔루션 기업으로, 데이터 보안 등급과 사용자 접근 등급 기반의 접근 제어 엔진을 핵심 기술로 보유하고 있다.",
-    "id": "02_press_release#1",
-    "doc": "02_press_release",
-    "doc_title": "보도자료 — 청솔유통 세이프브레인 도입 (2026-05-12)",
+    "title": "2. AI 제품 라인업",
+    "text": "현재 제품군은 세 가지다. ① DataKeeper(접근 제어 엔진): 문서를 섹션 단위로 분류하고 5단계 접근 모드로 제어. ② 팀 지식 어시스턴트: 사내 데이터 기반 질의응답 봇(내부·외부 겸용). ③ 문서 등급 자동 분류기: 관리자 키워드 규칙과 AI 분류를 결합한 등급 부여 도구. 2026년 하반기에는 이메일·챗 전송 시점의 접근 제어(DLP 확장)를 포함한 신규 AI 제품 출시를 준비하고 있다.",
+    "id": "01_ai_business_report#1",
+    "doc": "01_ai_business_report",
+    "doc_title": "AI 사업 현황 및 향후 전략 보고서 (2026년 7월)",
     "security_level": 0,
-    "confidence": 0.98,
-    "departments": [],
-    "keywords": [
-      "보도자료"
-    ],
-    "summary_generalized": "회사 소개(공개).",
-    "entities": [],
-    "needs_review": false
-  },
-  {
-    "title": "7월 전사 일정 안내",
-    "text": "7월 18일(토) 전사 워크숍이 양평 연수원에서 진행됩니다. 7월 21일(월)은 대체 휴무입니다. 워크숍 참석 여부는 7월 11일까지 인사팀 설문으로 회신해 주세요.",
-    "id": "03_company_notice#0",
-    "doc": "03_company_notice",
-    "doc_title": "사내 공지 모음 (2026년 7월)",
-    "security_level": 1,
     "confidence": 0.95,
-    "departments": [],
-    "keywords": [
-      "사내 공지"
-    ],
-    "summary_generalized": "7월 전사 워크숍 및 휴무 일정에 대한 사내 공지.",
-    "entities": [],
-    "needs_review": false
-  },
-  {
-    "title": "사무실 좌석 재배치",
-    "text": "개발팀 인원 증가에 따라 8월 첫째 주에 4층 좌석을 재배치합니다. 부서별 배치도는 추후 공지 예정입니다.",
-    "id": "03_company_notice#1",
-    "doc": "03_company_notice",
-    "doc_title": "사내 공지 모음 (2026년 7월)",
-    "security_level": 1,
-    "confidence": 0.95,
-    "departments": [],
-    "keywords": [
-      "사내 공지"
-    ],
-    "summary_generalized": "사무실 좌석 재배치 관련 사내 공지.",
-    "entities": [],
-    "needs_review": false
-  },
-  {
-    "title": "보안 교육 필수 이수 안내",
-    "text": "전 직원은 7월 말까지 정보보호 온라인 교육(1시간)을 이수해야 합니다. 미이수자는 사내 시스템 접근이 제한될 수 있습니다.",
-    "id": "03_company_notice#2",
-    "doc": "03_company_notice",
-    "doc_title": "사내 공지 모음 (2026년 7월)",
-    "security_level": 1,
-    "confidence": 0.95,
-    "departments": [],
-    "keywords": [
-      "사내 공지"
-    ],
-    "summary_generalized": "정보보호 교육 이수 안내 공지.",
-    "entities": [],
-    "needs_review": false
-  },
-  {
-    "title": "제품 개발 진행 상황",
-    "text": "세이프브레인 v2.1 개발이 일정대로 진행 중입니다. 섹션 분류 정확도가 내부 벤치마크 기준 91%까지 개선되었고, 출력 가드 응답 지연은 평균 120ms입니다. 8월 초 베타 배포 목표입니다.",
-    "id": "04_weekly_meeting#0",
-    "doc": "04_weekly_meeting",
-    "doc_title": "주간 전사 회의록 (2026-07-06)",
-    "security_level": 1,
-    "confidence": 0.9,
     "departments": [
       "개발팀"
     ],
     "keywords": [
-      "회의록",
-      "제품 개발"
+      "공개 자료",
+      "제품 소개"
     ],
-    "summary_generalized": "제품 차기 버전 개발이 일정대로 진행 중이며 품질 지표가 개선되고 있음.",
+    "summary_generalized": "접근 제어 엔진, 팀 지식 어시스턴트, 등급 자동 분류기 3개 제품군과 하반기 신제품 출시 계획(공개 수준).",
     "entities": [],
     "needs_review": false
   },
   {
-    "title": "영업 현황 요약",
-    "text": "현재 5개사와 도입 논의가 진행 중이며, 이 중 2건은 3분기 내 계약 체결이 유력합니다. 상세 파이프라인은 영업팀 문서를 참조하세요.",
-    "id": "04_weekly_meeting#1",
-    "doc": "04_weekly_meeting",
-    "doc_title": "주간 전사 회의록 (2026-07-06)",
-    "security_level": 2,
-    "confidence": 0.88,
-    "departments": [
-      "영업팀"
-    ],
-    "keywords": [
-      "회의록",
-      "영업 현황"
-    ],
-    "summary_generalized": "복수의 고객사와 도입 논의가 진행 중이며 일부는 분기 내 계약이 유력함.",
-    "entities": [],
-    "needs_review": false
-  },
-  {
-    "title": "채용 진행",
-    "text": "백엔드 엔지니어 2명, 프리세일즈 1명 채용이 진행 중입니다. 2차 면접이 이번 주 예정되어 있습니다.",
-    "id": "04_weekly_meeting#2",
-    "doc": "04_weekly_meeting",
-    "doc_title": "주간 전사 회의록 (2026-07-06)",
+    "title": "3. 사업 추진 현황 요약",
+    "text": "상반기에 AI 사업 조직을 3개 팀 24명 규모로 확대했고, 파트너 리셀러 프로그램에 8개사가 합류했다. 6월 말 기준 제품 데모 요청은 월평균 40건으로 1분기 대비 2배 증가했다. 하반기에는 금융·제조 업종을 중심으로 레퍼런스 확보에 집중할 계획이다.",
+    "id": "01_ai_business_report#2",
+    "doc": "01_ai_business_report",
+    "doc_title": "AI 사업 현황 및 향후 전략 보고서 (2026년 7월)",
     "security_level": 1,
-    "confidence": 0.9,
-    "departments": [
-      "인사팀"
-    ],
+    "confidence": 0.92,
+    "departments": [],
     "keywords": [
-      "회의록",
-      "채용"
+      "사업 현황",
+      "조직"
     ],
-    "summary_generalized": "개발·영업 직군 채용이 진행 중.",
+    "summary_generalized": "AI 사업 조직과 파트너 프로그램이 확대되고 있으며 제품 수요가 증가하는 추세.",
     "entities": [],
     "needs_review": false
   },
   {
-    "title": "논의 중 고객사 목록",
-    "text": "현재 논의가 진행 중인 고객사는 5개사입니다.\n- 한빛제조 (제조): PoC 완료, 계약 조건 협상 단계. 담당 김영수 상무.\n- 미래금융 (금융): 2차 기술 검증 진행 중. 보안 심사 통과가 관건. 담당 박지연 팀장.\n- 두리바이오 (바이오): 초기 미팅 2회 완료, 제안서 발송 예정.\n- 대성건설 (건설): 데모 시연 완료, 예산 검토 중.\n- 누리에듀 (교육): 인바운드 문의, 다음 주 첫 미팅.",
-    "id": "05_sales_pipeline#0",
-    "doc": "05_sales_pipeline",
-    "doc_title": "영업 파이프라인 현황 (2026-07-07 갱신)",
+    "title": "4. 고객사 논의 현황",
+    "text": "현재 15개 고객사와 제품 도입을 논의하고 있으며, 이 중 5개사와 PoC를 진행 중이다. 주요 논의 고객은 동방전자(전자), 한주자동차(제조), 신라은행(금융), 그린제약(바이오), 누리물류(물류) 등이다. 신라은행은 정보보호팀 보안 심사가 진행 중이며, 통과 시 금융권 첫 레퍼런스가 된다. 동방전자와 한주자동차는 PoC 결과에 대한 만족도가 높아 하반기 본계약 전환 가능성이 크다.",
+    "id": "01_ai_business_report#3",
+    "doc": "01_ai_business_report",
+    "doc_title": "AI 사업 현황 및 향후 전략 보고서 (2026년 7월)",
     "security_level": 2,
     "confidence": 0.93,
     "departments": [
       "영업팀"
     ],
     "keywords": [
-      "파이프라인",
-      "고객사 목록"
+      "고객사 목록",
+      "파이프라인"
     ],
-    "summary_generalized": "제조·금융·바이오·건설·교육 분야 5개사와 도입 논의가 진행 중이며, 단계는 초기 미팅부터 계약 협상까지 다양함.",
+    "summary_generalized": "전자·제조·금융·바이오·물류 분야 15개 고객사와 도입 논의 중이며 5개사와 PoC 진행 중. 일부는 본계약 전환 가능성이 높음.",
     "entities": [
       {
-        "text": "한빛제조",
+        "text": "동방전자",
         "type": "고객사",
         "placeholder": "[고객사A]"
       },
       {
-        "text": "미래금융",
+        "text": "한주자동차",
         "type": "고객사",
         "placeholder": "[고객사B]"
       },
       {
-        "text": "두리바이오",
+        "text": "신라은행",
         "type": "고객사",
         "placeholder": "[고객사C]"
       },
       {
-        "text": "대성건설",
+        "text": "그린제약",
         "type": "고객사",
         "placeholder": "[고객사D]"
       },
       {
-        "text": "누리에듀",
+        "text": "누리물류",
         "type": "고객사",
         "placeholder": "[고객사E]"
-      },
-      {
-        "text": "김영수",
-        "type": "인물",
-        "placeholder": "[인물A]"
-      },
-      {
-        "text": "박지연",
-        "type": "인물",
-        "placeholder": "[인물B]"
       }
     ],
     "needs_review": false
   },
   {
-    "title": "단계별 예상 계약 규모",
-    "text": "한빛제조는 연 4억 원 규모(전사 라이선스), 미래금융은 연 6억 원 규모(금융 특화 모듈 포함)로 협상 중입니다. 두리바이오와 대성건설은 각각 연 1.5억 원 수준으로 예상합니다.",
-    "id": "05_sales_pipeline#1",
-    "doc": "05_sales_pipeline",
-    "doc_title": "영업 파이프라인 현황 (2026-07-07 갱신)",
-    "security_level": 3,
-    "confidence": 0.92,
+    "title": "5. 고객사별 진행 단계",
+    "text": "동방전자: PoC 완료, 계약 조건 협상 단계. 한주자동차: 2차 기술 검증(BMT) 진행 중, 망분리 환경 지원이 핵심 쟁점. 신라은행: 보안 심사 서류 제출 완료, 8월 중 결과 예상. 그린제약: 초기 미팅 2회, 제안서 발송 예정. 누리물류: 데모 완료, 예산 검토 중. 나머지 10개사는 초기 상담~데모 단계에 분포한다.",
+    "id": "01_ai_business_report#4",
+    "doc": "01_ai_business_report",
+    "doc_title": "AI 사업 현황 및 향후 전략 보고서 (2026년 7월)",
+    "security_level": 2,
+    "confidence": 0.9,
     "departments": [
       "영업팀"
     ],
     "keywords": [
       "파이프라인",
-      "계약 규모"
+      "진행 단계"
     ],
-    "summary_generalized": "논의 중인 건들의 예상 계약 규모는 건당 연 1억~6억 원대이며, 대형 2건이 협상 단계에 있음.",
+    "summary_generalized": "고객사별로 계약 협상, 기술 검증, 보안 심사, 제안, 데모 등 다양한 단계가 진행 중.",
     "entities": [
       {
-        "text": "한빛제조",
+        "text": "동방전자",
         "type": "고객사",
         "placeholder": "[고객사A]"
       },
       {
-        "text": "미래금융",
+        "text": "한주자동차",
         "type": "고객사",
         "placeholder": "[고객사B]"
       },
       {
-        "text": "두리바이오",
+        "text": "신라은행",
         "type": "고객사",
         "placeholder": "[고객사C]"
       },
       {
-        "text": "대성건설",
+        "text": "그린제약",
         "type": "고객사",
         "placeholder": "[고객사D]"
       },
       {
-        "text": "연 4억 원",
+        "text": "누리물류",
+        "type": "고객사",
+        "placeholder": "[고객사E]"
+      }
+    ],
+    "needs_review": false
+  },
+  {
+    "title": "6. 예상 계약 규모",
+    "text": "전체 파이프라인의 예상 계약 규모는 총 47억 원이다. 대형 3건이 동방전자 11억 원, 신라은행 9억 원, 한주자동차 7.5억 원이며, 나머지 건들은 건당 1억~3억 원 수준이다. 성사 확률을 가중 반영한 기대 매출은 약 28억 원으로, 연간 AI 사업 매출 목표 30억 원의 93% 수준까지 가시성이 확보된 상태다.",
+    "id": "01_ai_business_report#5",
+    "doc": "01_ai_business_report",
+    "doc_title": "AI 사업 현황 및 향후 전략 보고서 (2026년 7월)",
+    "security_level": 3,
+    "confidence": 0.95,
+    "departments": [
+      "영업팀",
+      "재무팀"
+    ],
+    "keywords": [
+      "계약 규모",
+      "매출"
+    ],
+    "summary_generalized": "전체 파이프라인은 수십억 원 규모이며, 가중 기대 매출 기준으로 연간 목표의 90%대까지 가시성이 확보됨.",
+    "entities": [
+      {
+        "text": "동방전자",
+        "type": "고객사",
+        "placeholder": "[고객사A]"
+      },
+      {
+        "text": "신라은행",
+        "type": "고객사",
+        "placeholder": "[고객사C]"
+      },
+      {
+        "text": "한주자동차",
+        "type": "고객사",
+        "placeholder": "[고객사B]"
+      },
+      {
+        "text": "47억 원",
         "type": "금액",
         "placeholder": "[금액A]"
       },
       {
-        "text": "연 6억 원",
+        "text": "11억 원",
         "type": "금액",
         "placeholder": "[금액B]"
       },
       {
-        "text": "연 1.5억 원",
+        "text": "9억 원",
         "type": "금액",
         "placeholder": "[금액C]"
-      }
-    ],
-    "needs_review": true
-  },
-  {
-    "title": "이번 주 액션 아이템",
-    "text": "한빛제조 계약서 초안 법무 검토 요청, 미래금융 보안 심사 자료 제출(7/10 마감), 두리바이오 제안서 발송(7/9).",
-    "id": "05_sales_pipeline#2",
-    "doc": "05_sales_pipeline",
-    "doc_title": "영업 파이프라인 현황 (2026-07-07 갱신)",
-    "security_level": 2,
-    "confidence": 0.9,
-    "departments": [
-      "영업팀"
-    ],
-    "keywords": [
-      "파이프라인",
-      "액션 아이템"
-    ],
-    "summary_generalized": "진행 중인 영업 건들에 대한 주간 후속 조치 목록.",
-    "entities": [
-      {
-        "text": "한빛제조",
-        "type": "고객사",
-        "placeholder": "[고객사A]"
       },
       {
-        "text": "미래금융",
-        "type": "고객사",
-        "placeholder": "[고객사B]"
-      },
-      {
-        "text": "두리바이오",
-        "type": "고객사",
-        "placeholder": "[고객사C]"
-      }
-    ],
-    "needs_review": false
-  },
-  {
-    "title": "미팅 개요",
-    "text": "한빛제조 본사에서 3차 미팅 진행. 참석: (가온테크) 이도현 영업팀장, 정민아 프리세일즈 / (한빛제조) 김영수 상무, IT기획팀 3명. PoC 결과에 대한 만족도가 높았고, 계약 조건 협상으로 넘어가기로 합의.",
-    "id": "06_meeting_hanbit#0",
-    "doc": "06_meeting_hanbit",
-    "doc_title": "한빛제조 미팅 노트 (2026-07-02)",
-    "security_level": 2,
-    "confidence": 0.9,
-    "departments": [
-      "영업팀"
-    ],
-    "keywords": [
-      "미팅 노트"
-    ],
-    "summary_generalized": "제조 분야 고객사와의 3차 미팅에서 PoC 만족도가 높아 계약 협상 단계로 진입하기로 합의함.",
-    "entities": [
-      {
-        "text": "한빛제조",
-        "type": "고객사",
-        "placeholder": "[고객사A]"
-      },
-      {
-        "text": "이도현",
-        "type": "인물",
-        "placeholder": "[인물C]"
-      },
-      {
-        "text": "정민아",
-        "type": "인물",
-        "placeholder": "[인물D]"
-      },
-      {
-        "text": "김영수",
-        "type": "인물",
-        "placeholder": "[인물A]"
-      }
-    ],
-    "needs_review": false
-  },
-  {
-    "title": "협상 쟁점",
-    "text": "한빛제조 측은 연 4억 제안가에서 15% 할인과 3년 약정을 요구. 우리 측 마지노선은 10% 할인 + 2년 약정. 김영수 상무는 내부 품의를 8월 이사회 전에 올리고 싶어 하므로 7월 말까지 조건 확정 필요.",
-    "id": "06_meeting_hanbit#1",
-    "doc": "06_meeting_hanbit",
-    "doc_title": "한빛제조 미팅 노트 (2026-07-02)",
-    "security_level": 3,
-    "confidence": 0.94,
-    "departments": [
-      "영업팀"
-    ],
-    "keywords": [
-      "협상",
-      "계약 조건"
-    ],
-    "summary_generalized": "가격 할인율과 약정 기간을 두고 협상 중이며, 고객사 내부 일정상 7월 말까지 조건 확정이 필요함.",
-    "entities": [
-      {
-        "text": "한빛제조",
-        "type": "고객사",
-        "placeholder": "[고객사A]"
-      },
-      {
-        "text": "김영수",
-        "type": "인물",
-        "placeholder": "[인물A]"
-      },
-      {
-        "text": "연 4억",
+        "text": "7.5억 원",
         "type": "금액",
         "placeholder": "[금액D]"
       },
       {
-        "text": "15% 할인",
-        "type": "조건",
-        "placeholder": "[조건A]"
-      },
-      {
-        "text": "10% 할인",
-        "type": "조건",
-        "placeholder": "[조건B]"
-      }
-    ],
-    "needs_review": true
-  },
-  {
-    "title": "후속 조치",
-    "text": "계약서 초안을 법무 검토 후 7/15까지 송부. 유지보수 SLA 조항은 별첨으로 분리.",
-    "id": "06_meeting_hanbit#2",
-    "doc": "06_meeting_hanbit",
-    "doc_title": "한빛제조 미팅 노트 (2026-07-02)",
-    "security_level": 2,
-    "confidence": 0.88,
-    "departments": [
-      "영업팀"
-    ],
-    "keywords": [
-      "미팅 노트",
-      "후속 조치"
-    ],
-    "summary_generalized": "계약서 초안 법무 검토 및 송부 등 후속 조치 목록.",
-    "entities": [],
-    "needs_review": false
-  },
-  {
-    "title": "미팅 개요",
-    "text": "미래금융 2차 기술 검증(BMT) 중간 점검 미팅. 참석: (가온테크) 박서준 CTO, 이도현 영업팀장 / (미래금융) 정보보호팀, 디지털혁신팀. 온프레미스 배포 구성과 망분리 환경 지원이 핵심 검증 항목.",
-    "id": "07_meeting_mirae#0",
-    "doc": "07_meeting_mirae",
-    "doc_title": "미래금융 미팅 노트 (2026-07-04)",
-    "security_level": 2,
-    "confidence": 0.9,
-    "departments": [
-      "영업팀"
-    ],
-    "keywords": [
-      "미팅 노트"
-    ],
-    "summary_generalized": "금융 분야 고객사와 기술 검증(BMT) 중간 점검 미팅을 진행함. 온프레미스·망분리 지원이 핵심 검증 항목.",
-    "entities": [
-      {
-        "text": "미래금융",
-        "type": "고객사",
-        "placeholder": "[고객사B]"
-      },
-      {
-        "text": "박서준",
-        "type": "인물",
-        "placeholder": "[인물E]"
-      },
-      {
-        "text": "이도현",
-        "type": "인물",
-        "placeholder": "[인물C]"
-      }
-    ],
-    "needs_review": false
-  },
-  {
-    "title": "기술 검증 이슈",
-    "text": "망분리 환경에서 모델 업데이트 배포 방식에 대한 우려 제기됨. 오프라인 패키지 배포 방안을 7/11까지 문서로 제출하기로 함. 보안 심사 통과 시 금융권 첫 레퍼런스가 되므로 전사적으로 우선순위 최상.",
-    "id": "07_meeting_mirae#1",
-    "doc": "07_meeting_mirae",
-    "doc_title": "미래금융 미팅 노트 (2026-07-04)",
-    "security_level": 2,
-    "confidence": 0.88,
-    "departments": [
-      "영업팀",
-      "개발팀"
-    ],
-    "keywords": [
-      "기술 검증"
-    ],
-    "summary_generalized": "망분리 환경 배포 방식에 대한 보완 자료를 제출하기로 함. 통과 시 해당 업권 첫 레퍼런스가 되어 우선순위가 높음.",
-    "entities": [],
-    "needs_review": false
-  },
-  {
-    "title": "계약 전망",
-    "text": "보안 심사 통과를 전제로 연 6억 원 규모(금융 특화 모듈 포함), 9월 계약 목표. 미래금융 측 예산은 이미 확보되어 있다고 함.",
-    "id": "07_meeting_mirae#2",
-    "doc": "07_meeting_mirae",
-    "doc_title": "미래금융 미팅 노트 (2026-07-04)",
-    "security_level": 3,
-    "confidence": 0.93,
-    "departments": [
-      "영업팀"
-    ],
-    "keywords": [
-      "계약 전망"
-    ],
-    "summary_generalized": "보안 심사 통과를 전제로 연 수억 원대 규모의 계약을 3분기 중 목표로 하고 있으며 고객사 예산은 확보된 상태.",
-    "entities": [
-      {
-        "text": "미래금융",
-        "type": "고객사",
-        "placeholder": "[고객사B]"
-      },
-      {
-        "text": "연 6억 원",
-        "type": "금액",
-        "placeholder": "[금액B]"
-      }
-    ],
-    "needs_review": true
-  },
-  {
-    "title": "청솔유통 계약 조건",
-    "text": "2026년 5월 체결. 전사 라이선스 연 3억 원, 3년 약정(연 5% 인상 조건). 외부 협력사용 지식봇 모듈 포함. 유지보수 SLA는 장애 등급 1 기준 4시간 내 대응. 계약 담당: 이도현 영업팀장.",
-    "id": "08_contract_summary#0",
-    "doc": "08_contract_summary",
-    "doc_title": "체결 계약 요약 (2026년 상반기)",
-    "security_level": 3,
-    "confidence": 0.95,
-    "departments": [
-      "영업팀",
-      "재무팀"
-    ],
-    "keywords": [
-      "계약 조건"
-    ],
-    "summary_generalized": "유통 분야 고객사와 연 수억 원대 전사 라이선스 다년 계약을 체결함(외부용 모듈 포함).",
-    "entities": [
-      {
-        "text": "청솔유통",
-        "type": "고객사",
-        "placeholder": "[고객사F]"
-      },
-      {
-        "text": "연 3억 원",
+        "text": "1억~3억 원",
         "type": "금액",
         "placeholder": "[금액E]"
       },
       {
-        "text": "이도현",
-        "type": "인물",
-        "placeholder": "[인물C]"
-      }
-    ],
-    "needs_review": true
-  },
-  {
-    "title": "서진물류 계약 조건",
-    "text": "2026년 3월 체결. 부서 단위 라이선스 연 1.2억 원, 1년 약정. 물류 도메인 사전(용어집) 구축 용역 3천만 원 별도. 갱신 협상은 2027년 1월 시작 예정.",
-    "id": "08_contract_summary#1",
-    "doc": "08_contract_summary",
-    "doc_title": "체결 계약 요약 (2026년 상반기)",
-    "security_level": 3,
-    "confidence": 0.95,
-    "departments": [
-      "영업팀",
-      "재무팀"
-    ],
-    "keywords": [
-      "계약 조건"
-    ],
-    "summary_generalized": "물류 분야 고객사와 부서 단위 라이선스 연간 계약 및 별도 용역을 체결함.",
-    "entities": [
-      {
-        "text": "서진물류",
-        "type": "고객사",
-        "placeholder": "[고객사G]"
-      },
-      {
-        "text": "연 1.2억 원",
+        "text": "28억 원",
         "type": "금액",
         "placeholder": "[금액F]"
       },
       {
-        "text": "3천만 원",
+        "text": "30억 원",
         "type": "금액",
         "placeholder": "[금액G]"
+      },
+      {
+        "text": "93%",
+        "type": "수치",
+        "placeholder": "[수치A]"
       }
     ],
     "needs_review": true
   },
   {
-    "title": "계약 관리 유의사항",
-    "text": "두 계약 모두 데이터 국내 보관 조항이 포함되어 있음. 클라우드 리전 변경 시 사전 서면 동의 필요.",
-    "id": "08_contract_summary#2",
-    "doc": "08_contract_summary",
-    "doc_title": "체결 계약 요약 (2026년 상반기)",
-    "security_level": 2,
-    "confidence": 0.88,
-    "departments": [
-      "영업팀",
-      "재무팀"
-    ],
-    "keywords": [
-      "계약 관리"
-    ],
-    "summary_generalized": "체결 계약에 데이터 국내 보관 조항이 포함되어 있어 운영 시 유의가 필요함.",
-    "entities": [],
-    "needs_review": false
-  },
-  {
-    "title": "확정 매출 (체결 계약 기준)",
-    "text": "청솔유통 연 3억 원 + 서진물류 연 1.2억 원 + 용역 3천만 원 = 확정 매출 4.5억 원. 2026년 연간 매출 목표는 12억 원.",
-    "id": "09_revenue_forecast#0",
-    "doc": "09_revenue_forecast",
-    "doc_title": "2026년 매출 전망 (재무팀, 7월 갱신)",
-    "security_level": 3,
-    "confidence": 0.95,
-    "departments": [
-      "재무팀"
-    ],
-    "keywords": [
-      "매출"
-    ],
-    "summary_generalized": "체결 계약 기준 확정 매출이 연간 목표의 40% 수준이며, 나머지는 파이프라인 성사에 달려 있음.",
-    "entities": [
-      {
-        "text": "청솔유통",
-        "type": "고객사",
-        "placeholder": "[고객사F]"
-      },
-      {
-        "text": "서진물류",
-        "type": "고객사",
-        "placeholder": "[고객사G]"
-      },
-      {
-        "text": "연 3억 원",
-        "type": "금액",
-        "placeholder": "[금액E]"
-      },
-      {
-        "text": "연 1.2억 원",
-        "type": "금액",
-        "placeholder": "[금액F]"
-      },
-      {
-        "text": "3천만 원",
-        "type": "금액",
-        "placeholder": "[금액G]"
-      },
-      {
-        "text": "4.5억 원",
-        "type": "금액",
-        "placeholder": "[금액H]"
-      },
-      {
-        "text": "12억 원",
-        "type": "금액",
-        "placeholder": "[금액I]"
-      }
-    ],
-    "needs_review": true
-  },
-  {
-    "title": "파이프라인 반영 전망",
-    "text": "한빛제조(4억, 성사 확률 80%)와 미래금융(6억, 성사 확률 60%)이 3분기 내 체결되면 가중 기대 매출은 약 6.8억 원 추가. 목표 대비 달성률 전망은 약 94%. 두 건 중 한 건이라도 밀리면 4분기 신규 파이프라인 확보가 필수.",
-    "id": "09_revenue_forecast#1",
-    "doc": "09_revenue_forecast",
-    "doc_title": "2026년 매출 전망 (재무팀, 7월 갱신)",
+    "title": "7. 수익성 분석",
+    "text": "주요 프로젝트들의 영업이익률은 32% 수준으로 예상된다. 클라우드 인프라 원가는 매출의 18%로 추정되며, 온프레미스 구축형은 초기 구축 인건비 비중이 높아 첫해 이익률이 21%까지 낮아진다. 3년 유지보수 계약이 동반될 경우 누적 이익률은 38%까지 개선되는 구조다.",
+    "id": "01_ai_business_report#6",
+    "doc": "01_ai_business_report",
+    "doc_title": "AI 사업 현황 및 향후 전략 보고서 (2026년 7월)",
     "security_level": 3,
     "confidence": 0.94,
     "departments": [
       "재무팀"
     ],
     "keywords": [
-      "매출",
-      "파이프라인"
+      "수익성",
+      "원가"
     ],
-    "summary_generalized": "대형 파이프라인 2건이 분기 내 체결되면 연간 목표에 근접하나, 지연 시 4분기 신규 파이프라인 확보가 필요함.",
+    "summary_generalized": "프로젝트 수익성은 구축 형태에 따라 달라지며, 장기 유지보수 동반 시 개선되는 구조.",
     "entities": [
       {
-        "text": "한빛제조",
-        "type": "고객사",
-        "placeholder": "[고객사A]"
-      },
-      {
-        "text": "미래금융",
-        "type": "고객사",
-        "placeholder": "[고객사B]"
-      },
-      {
-        "text": "6.8억 원",
-        "type": "금액",
-        "placeholder": "[금액J]"
-      },
-      {
-        "text": "94%",
-        "type": "수치",
-        "placeholder": "[수치A]"
-      },
-      {
-        "text": "80%",
+        "text": "32%",
         "type": "수치",
         "placeholder": "[수치B]"
       },
       {
-        "text": "60%",
+        "text": "18%",
         "type": "수치",
         "placeholder": "[수치C]"
-      }
-    ],
-    "needs_review": true
-  },
-  {
-    "title": "자금 운용 참고",
-    "text": "현재 현금 잔고 기준 런웨이는 14개월. 미래금융 계약이 확정되면 시리즈 B 협상에서 밸류에이션 방어에 유리. 이 수치는 경영진 외 공유 금지.",
-    "id": "09_revenue_forecast#2",
-    "doc": "09_revenue_forecast",
-    "doc_title": "2026년 매출 전망 (재무팀, 7월 갱신)",
-    "security_level": 4,
-    "confidence": 0.96,
-    "departments": [
-      "재무팀"
-    ],
-    "keywords": [
-      "런웨이",
-      "자금"
-    ],
-    "summary_generalized": "자금 운용 및 투자 유치 관련 경영진 전용 메모.",
-    "entities": [
+      },
       {
-        "text": "14개월",
+        "text": "21%",
         "type": "수치",
         "placeholder": "[수치D]"
       },
       {
-        "text": "시리즈 B",
-        "type": "재무",
-        "placeholder": "[재무A]"
+        "text": "38%",
+        "type": "수치",
+        "placeholder": "[수치E]"
       }
     ],
     "needs_review": true
   },
   {
-    "title": "공개 가능 로드맵",
-    "text": "3분기: 섹션 분류 정확도 개선, 감사 로그 대시보드 정식 출시. 4분기: 이메일/챗 전송 시점 접근 제어(DLP 확장) 베타.",
-    "id": "10_product_roadmap#0",
-    "doc": "10_product_roadmap",
-    "doc_title": "제품 로드맵 (2026 하반기)",
-    "security_level": 1,
-    "confidence": 0.92,
+    "title": "8. 경쟁 입찰 및 가격 전략",
+    "text": "동방전자 건은 경쟁사 시큐어링크와 2파전 경쟁 입찰로 진행 중이다. 기술 평가에서는 우위이나 가격에서 열세로 파악되며, 수주 확률을 높이기 위해 최대 12% 할인 여력을 확보해 두었다. 시큐어링크가 9월 유사 기능을 출시할 예정이라는 정보가 있어, 신라은행 건은 그 전에 계약을 마무리하는 것이 유리하다.",
+    "id": "01_ai_business_report#7",
+    "doc": "01_ai_business_report",
+    "doc_title": "AI 사업 현황 및 향후 전략 보고서 (2026년 7월)",
+    "security_level": 3,
+    "confidence": 0.94,
     "departments": [
-      "개발팀"
-    ],
-    "keywords": [
-      "로드맵"
-    ],
-    "summary_generalized": "하반기 공개 가능 제품 로드맵(품질 개선, 대시보드, DLP 확장 베타).",
-    "entities": [],
-    "needs_review": false
-  },
-  {
-    "title": "내부 전용 로드맵",
-    "text": "금융 특화 모듈(망분리 배포 지원)은 미래금융 BMT 결과에 따라 3분기 중 우선 개발. 경쟁사 시큐어링크가 유사 기능을 9월 출시 예정이라는 정보가 있어, DLP 확장 베타를 4분기 초로 앞당기는 방안 검토 중.",
-    "id": "10_product_roadmap#1",
-    "doc": "10_product_roadmap",
-    "doc_title": "제품 로드맵 (2026 하반기)",
-    "security_level": 2,
-    "confidence": 0.9,
-    "departments": [
-      "개발팀",
       "영업팀"
     ],
     "keywords": [
-      "로드맵",
-      "경쟁사"
+      "경쟁 입찰",
+      "가격 전략"
     ],
-    "summary_generalized": "특정 고객 검증 결과와 경쟁 상황에 따라 일부 기능의 개발 우선순위 조정을 검토 중.",
+    "summary_generalized": "일부 대형 건에서 경쟁 입찰이 진행 중이며, 가격 조정을 통해 수주 가능성을 높일 수 있는 상황.",
     "entities": [
       {
-        "text": "미래금융",
+        "text": "동방전자",
         "type": "고객사",
-        "placeholder": "[고객사B]"
+        "placeholder": "[고객사A]"
+      },
+      {
+        "text": "신라은행",
+        "type": "고객사",
+        "placeholder": "[고객사C]"
       },
       {
         "text": "시큐어링크",
         "type": "경쟁사",
         "placeholder": "[경쟁사A]"
-      }
-    ],
-    "needs_review": false
-  },
-  {
-    "title": "하반기 보상 조정안",
-    "text": "핵심 인력 이탈 방지를 위해 개발팀 시니어 3명 대상 스톡옵션 추가 부여 검토 중. 박서준 CTO 연봉 조정안은 이사회 승인 대기.",
-    "id": "11_hr_notes#0",
-    "doc": "11_hr_notes",
-    "doc_title": "인사 검토 메모 (인사팀·경영진 전용)",
-    "security_level": 4,
-    "confidence": 0.97,
-    "departments": [
-      "인사팀"
-    ],
-    "keywords": [
-      "인사",
-      "보상"
-    ],
-    "summary_generalized": "핵심 인력 보상 조정 관련 경영진 전용 검토 메모.",
-    "entities": [
+      },
       {
-        "text": "박서준",
-        "type": "인물",
-        "placeholder": "[인물E]"
+        "text": "12%",
+        "type": "수치",
+        "placeholder": "[수치F]"
       }
     ],
     "needs_review": true
   },
   {
-    "title": "평가 관련 민감 사항",
-    "text": "영업팀 신규 입사자 1명이 수습 평가 기준 미달로 계약 연장 여부 검토 대상. 7월 말 인사위원회에서 결정 예정.",
-    "id": "11_hr_notes#1",
-    "doc": "11_hr_notes",
-    "doc_title": "인사 검토 메모 (인사팀·경영진 전용)",
-    "security_level": 4,
-    "confidence": 0.97,
-    "departments": [
-      "인사팀"
-    ],
-    "keywords": [
-      "인사",
-      "평가"
-    ],
-    "summary_generalized": "개인 평가 관련 민감 사항(경영진·인사팀 전용).",
-    "entities": [],
-    "needs_review": true
-  },
-  {
-    "title": "인수 제안 검토",
-    "text": "글로벌 보안 기업 A사로부터 인수 의향 타진이 있었음(7/1, 비공식). 제시 밸류에이션은 800억 원 수준. 시리즈 B(목표 밸류 600억)와 병행 검토. 자문사 선정 전까지 이 문서는 대표이사와 CFO만 열람.",
-    "id": "12_ma_memo#0",
-    "doc": "12_ma_memo",
-    "doc_title": "전략 검토 메모 — 프로젝트 오로라 (대표이사 전용)",
+    "title": "9. 전략 검토 — 인수 건 (프로젝트 세도나)",
+    "text": "문서 암호화 스타트업 클라우드락에 대한 인수를 검토 중이다(코드네임 '세도나'). 예상 인수 가격은 60억 원 수준이며, 인수 시 DLP 확장 제품의 출시를 6개월 이상 앞당길 수 있다. 실사 자문사 선정 전까지 본 건은 대표이사와 CFO만 열람하며, 외부에 알려질 경우 진행 중인 계약 협상과 채용에 부정적 영향이 예상되므로 코드네임으로만 지칭한다.",
+    "id": "01_ai_business_report#8",
+    "doc": "01_ai_business_report",
+    "doc_title": "AI 사업 현황 및 향후 전략 보고서 (2026년 7월)",
     "security_level": 4,
     "confidence": 0.98,
     "departments": [],
     "keywords": [
       "인수",
-      "밸류에이션"
+      "M&A"
     ],
-    "summary_generalized": "전략적 검토 사항에 대한 대표이사 전용 메모.",
+    "summary_generalized": "전략적 인수 검토가 진행 중이나 상세 내용은 최고 등급 기밀.",
     "entities": [
       {
-        "text": "800억 원",
-        "type": "금액",
-        "placeholder": "[금액K]"
+        "text": "클라우드락",
+        "type": "피인수기업",
+        "placeholder": "[피인수기업A]"
       },
       {
-        "text": "600억",
+        "text": "세도나",
+        "type": "코드네임",
+        "placeholder": "[코드네임A]"
+      },
+      {
+        "text": "60억 원",
         "type": "금액",
-        "placeholder": "[금액L]"
+        "placeholder": "[금액H]"
+      }
+    ],
+    "needs_review": true
+  },
+  {
+    "title": "10. 재무 전망 및 투자 유치",
+    "text": "AI 사업 단독 손익분기는 2027년 2분기로 예상된다. 현재 현금 흐름 기준 런웨이는 16개월이며, 신라은행 계약이 확정되면 하반기 시리즈 B 협상에서 밸류에이션 방어에 유리하다. 목표 조달 규모는 150억 원이다. 본 섹션의 수치는 경영진 외 공유를 금지한다.",
+    "id": "01_ai_business_report#9",
+    "doc": "01_ai_business_report",
+    "doc_title": "AI 사업 현황 및 향후 전략 보고서 (2026년 7월)",
+    "security_level": 4,
+    "confidence": 0.97,
+    "departments": [
+      "재무팀"
+    ],
+    "keywords": [
+      "재무 전망",
+      "투자 유치",
+      "런웨이"
+    ],
+    "summary_generalized": "중장기 재무 전망과 투자 유치 관련 경영진 전용 정보.",
+    "entities": [
+      {
+        "text": "신라은행",
+        "type": "고객사",
+        "placeholder": "[고객사C]"
+      },
+      {
+        "text": "2027년 2분기",
+        "type": "수치",
+        "placeholder": "[수치G]"
+      },
+      {
+        "text": "16개월",
+        "type": "수치",
+        "placeholder": "[수치H]"
       },
       {
         "text": "시리즈 B",
@@ -862,42 +370,9 @@
         "placeholder": "[재무A]"
       },
       {
-        "text": "오로라",
-        "type": "코드네임",
-        "placeholder": "[코드네임A]"
-      },
-      {
-        "text": "A사",
-        "type": "회사",
-        "placeholder": "[회사A]"
-      }
-    ],
-    "needs_review": true
-  },
-  {
-    "title": "리스크 메모",
-    "text": "인수 논의가 외부에 알려질 경우 진행 중인 미래금융 계약과 채용에 부정적 영향 가능. 코드네임 '오로라'로만 지칭할 것.",
-    "id": "12_ma_memo#1",
-    "doc": "12_ma_memo",
-    "doc_title": "전략 검토 메모 — 프로젝트 오로라 (대표이사 전용)",
-    "security_level": 4,
-    "confidence": 0.98,
-    "departments": [],
-    "keywords": [
-      "인수",
-      "리스크"
-    ],
-    "summary_generalized": "전략 검토 관련 보안 유지 지침(대표이사 전용).",
-    "entities": [
-      {
-        "text": "미래금융",
-        "type": "고객사",
-        "placeholder": "[고객사B]"
-      },
-      {
-        "text": "오로라",
-        "type": "코드네임",
-        "placeholder": "[코드네임A]"
+        "text": "150억 원",
+        "type": "금액",
+        "placeholder": "[금액I]"
       }
     ],
     "needs_review": true

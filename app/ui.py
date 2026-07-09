@@ -153,7 +153,7 @@ def tab_viewer(sections, policy, persona, purpose):
             return f"🔐 {title}"
         return f"📄 {title}"
 
-    selected = st.selectbox("문서 선택", docs, format_func=label, index=4)
+    selected = st.selectbox("문서 선택", docs, format_func=label, index=0)
     doc, doc_title = selected
 
     decisions = [decide(s, persona, policy, purpose) for s in by_doc[doc]]
@@ -276,7 +276,8 @@ def main():
             help="판단·집계 목적의 접근이면 A1/A2 판정 섹션이 A3(AI 추론 근거 전용)로 승격됩니다. D4는 승격되지 않습니다.",
         )
         st.divider()
-        st.caption(f"코퍼스: 문서 12개 / 섹션 {len(sections)}개\n\n분류는 수집 시 1회 — 뷰어·매트릭스는 API 호출 없이 동작합니다.")
+        n_docs = len({s["doc"] for s in sections})
+        st.caption(f"코퍼스: 문서 {n_docs}개 / 섹션 {len(sections)}개\n\n분류는 수집 시 1회 — 뷰어·매트릭스는 API 호출 없이 동작합니다.")
 
     purpose = "judgment" if judgment else "info"
 

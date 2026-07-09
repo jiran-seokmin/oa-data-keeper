@@ -89,7 +89,8 @@ app/
   web/           React + assistant-ui 프론트엔드
   view_access.py CLI 문서 접근 결과 뷰어 (LLM/API 미사용)
 data/
-  samples/       DB 시딩 대상 원문 4개 (문단/의미 단위로 분해)
+  samples/       DB 시딩 대상 기본 코퍼스 원문 4개 (GRADES 등급 시드 필수)
+  uploads/       drag & drop 업로드 데모용 원문 (시딩 안 됨, 라이브 분류)
   schema.sql     SQLite 스키마 (documents/sections/entities/personas)
 tests/
   test_engine.py 판정 시나리오 테스트: python tests/test_engine.py

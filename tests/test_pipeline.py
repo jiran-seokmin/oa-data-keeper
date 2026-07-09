@@ -113,6 +113,15 @@ def main():
     check("Gemini system_instruction에 원문 엔티티 미포함", "실드락" not in first_call["config"].system_instruction)
     check("Gemini 출력 가드 재시도", result_gemini.guard.retried is True and len(gemini.models.calls) == 2)
 
+    # ── 검색 0건: '권한 필요'가 아니라 자료 없음 안내, LLM 호출도 없어야 함 ──
+    CEO = {"name": "CEO", "clearance": 4, "department": "경영진", "channel": "internal"}
+    no_match_client = FakeClient()
+    result_none = pipeline.answer("주차장 이용 규정", CEO, sections=sections, policy=POLICY, client=no_match_client)
+    check("검색 0건: 자료 없음 안내 반환", result_none.answer == pipeline.NO_MATCH_MESSAGE)
+    check("검색 0건: '권한' 언급 없음", "권한" not in result_none.answer)
+    check("검색 0건: LLM 미호출", len(no_match_client.messages.calls) == 0)
+    check("검색 0건: 출력 가드 미발동", result_none.guard.triggered is False)
+
     print("\n전체 테스트 통과 ✅")
 
 

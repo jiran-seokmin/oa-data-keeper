@@ -314,6 +314,138 @@ img { display: block; }
   color: #111827;
 }
 
+/* 문서함 업로드 */
+.dk-doc-dropzone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px dashed #C7D2FE;
+  border-radius: 8px;
+  background: #F8FAFC;
+  color: #384252;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color .14s, background .14s, box-shadow .14s;
+}
+.dk-doc-dropzone:hover,
+.dk-doc-dropzone.active {
+  border-color: #111827;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+.dk-doc-drop-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  place-items: center;
+  border-radius: 8px;
+  background: #111827;
+  color: #FFFFFF;
+}
+.dk-doc-dropzone.active .dk-doc-drop-icon svg,
+.dk-upload-progress.classifying .dk-upload-head svg,
+.dk-upload-progress.reading .dk-upload-head svg,
+.dk-upload-progress.saving .dk-upload-head svg {
+  animation: dk-spin 1s linear infinite;
+}
+.dk-doc-drop-title {
+  color: #111827;
+  font-size: 13px;
+  font-weight: 700;
+}
+.dk-doc-drop-sub {
+  margin-top: 1px;
+  color: #9CA3AF;
+  font-size: 11.5px;
+}
+.dk-upload-progress {
+  overflow: hidden;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  background: #FFFFFF;
+  padding: 12px 14px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.dk-upload-progress.complete {
+  border-color: #BBF7D0;
+  background: #F0FDF4;
+}
+.dk-upload-progress.error {
+  border-color: #FCA5A5;
+  background: #FEF2F2;
+}
+.dk-upload-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  color: #111827;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.dk-upload-head span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dk-upload-progress.complete .dk-upload-head {
+  color: #166534;
+}
+.dk-upload-progress.error .dk-upload-head {
+  color: #991B1B;
+}
+.dk-upload-message {
+  margin-top: 6px;
+  color: #4B5563;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.dk-upload-steps {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+}
+.dk-upload-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #9CA3AF;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.dk-upload-step::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: #E5E7EB;
+}
+.dk-upload-step.done {
+  color: #166534;
+}
+.dk-upload-step.done::before {
+  background: #22C55E;
+}
+.dk-upload-step.current {
+  color: #111827;
+}
+.dk-upload-step.current::before {
+  background: #111827;
+  box-shadow: 0 0 0 5px rgba(17, 24, 39, 0.10);
+  animation: dk-pulse 1.2s ease-in-out infinite;
+}
+@keyframes dk-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes dk-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(17, 24, 39, 0.08); }
+  50% { box-shadow: 0 0 0 8px rgba(17, 24, 39, 0.02); }
+}
+
 /* 앱 셸 */
 .dk-app {
   display: flex;

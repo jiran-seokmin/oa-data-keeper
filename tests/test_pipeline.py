@@ -31,19 +31,21 @@ class FakeClient:
         self.messages = FakeMessages()
 
 
-class FakeInteractions:
+class FakeModels:
+    """실제 google-genai API 형태: client.models.generate_content(...) → resp.text"""
+
     def __init__(self):
         self.calls = []
 
-    def create(self, **kwargs):
+    def generate_content(self, **kwargs):
         self.calls.append(kwargs)
         text = "실드락 인수 건은 검토 중입니다." if len(self.calls) == 1 else "[기업명A] 인수 건은 검토 중입니다."
-        return SimpleNamespace(output_text=text)
+        return SimpleNamespace(text=text)
 
 
 class FakeGeminiClient:
     def __init__(self):
-        self.interactions = FakeInteractions()
+        self.models = FakeModels()
 
 
 def check(name, cond):
@@ -95,10 +97,10 @@ def main():
 
     gemini = FakeGeminiClient()
     result_gemini = pipeline.answer("인수 검토", SALES_REP, sections=sections, policy=POLICY, client=gemini)
-    first_call = gemini.interactions.calls[0]
-    check("Gemini는 interactions.create 호출", "system_instruction" in first_call and "input" in first_call)
-    check("Gemini 프롬프트에 원문 엔티티 미포함", "실드락" not in first_call["system_instruction"])
-    check("Gemini 출력 가드 재시도", result_gemini.guard.retried is True and len(gemini.interactions.calls) == 2)
+    first_call = gemini.models.calls[0]
+    check("Gemini는 models.generate_content 호출", "config" in first_call and "contents" in first_call)
+    check("Gemini system_instruction에 원문 엔티티 미포함", "실드락" not in first_call["config"].system_instruction)
+    check("Gemini 출력 가드 재시도", result_gemini.guard.retried is True and len(gemini.models.calls) == 2)
 
     print("\n전체 테스트 통과 ✅")
 

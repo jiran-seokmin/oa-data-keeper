@@ -14,11 +14,11 @@ from pathlib import Path
 import yaml
 
 MODE_NAMES = {
-    0: "A0 차단",
-    1: "A1 마스킹",
+    0: "A0 전체 접근",
+    1: "A1 노출 제한",
     2: "A2 의미 제한",
-    3: "A3 노출 제한",
-    4: "A4 전체 접근",
+    3: "A3 정보 마스킹",
+    4: "A4 접근 차단",
 }
 
 LEVEL_NAMES = {
@@ -51,12 +51,12 @@ def load_yaml(path: str | Path) -> dict:
 
 def base_mode_for_gap(gap: int) -> int:
     if gap >= 0:
-        return 4
+        return 0
     if gap == -1:
         return 2
     if gap == -2:
-        return 1
-    return 0
+        return 3
+    return 4
 
 
 def d4_mode_for_clearance(clearance: int, policy: dict | None = None) -> int:
@@ -65,24 +65,24 @@ def d4_mode_for_clearance(clearance: int, policy: dict | None = None) -> int:
     if configured is not None:
         return configured
     if clearance >= 4:
-        return 4
+        return 0
     if clearance == 3:
-        return 3
-    if clearance == 2:
         return 1
-    return 0
+    if clearance == 2:
+        return 3
+    return 4
 
 
 def decide(section: dict, persona: dict, policy: dict, purpose: str = "info") -> Decision:
     """섹션 하나에 대한 접근 모드 판정.
 
-    purpose: "info"(정보 조회) | "judgment"(판단/집계 질의 — A3 승격 후보)
+    purpose: "info"(정보 조회) | "judgment"(판단/집계 질의 — A1 완화 후보)
     """
     # default-deny: 등급이 없으면 최고 등급으로 간주
     d = section.get("security_level")
     if d is None:
         c = persona["clearance"]
-        return Decision(0, 0, 4, c, c - 4, ["미분류 섹션: 관리자 검수 전 접근 차단 (default-deny)"])
+        return Decision(4, 4, 4, c, c - 4, ["미분류 섹션: 관리자 검수 전 접근 차단 (default-deny)"])
     c = persona["clearance"]
     gap = c - d
     reasons: list[str] = []
@@ -90,11 +90,11 @@ def decide(section: dict, persona: dict, policy: dict, purpose: str = "info") ->
     # 외부 채널 하드 캡: D0만 공개, 나머지 전면 차단
     if persona.get("channel") == "external" and policy["external_channel"]["public_only"]:
         if d == 0:
-            return Decision(4, 4, d, c, gap, ["외부 채널: D0 공개 정보만 전체 접근"])
-        return Decision(0, 0, d, c, gap, ["외부 채널: D0 외 전면 차단 (하드 캡)"])
+            return Decision(0, 0, d, c, gap, ["외부 채널: D0 공개 정보만 전체 접근"])
+        return Decision(4, 4, d, c, gap, ["외부 채널: D0 외 전면 차단 (하드 캡)"])
 
     if d == 0:
-        return Decision(4, 4, d, c, gap, ["D0 공개 정보"])
+        return Decision(0, 0, d, c, gap, ["D0 공개 정보"])
 
     if d == 4:
         mode = d4_mode_for_clearance(c, policy)
@@ -108,26 +108,26 @@ def decide(section: dict, persona: dict, policy: dict, purpose: str = "info") ->
 
     modifiers = policy.get("modifiers", {})
 
-    # 부서 관련성 보정: 담당 부서 데이터면 +1단계 (A0에서는 부활 불가)
+    # 부서 관련성 보정: 담당 부서 데이터면 1단계 완화 (A4 차단에서는 부활 불가)
     if (
         modifiers.get("department_boost", {}).get("enabled")
-        and base >= 1
+        and base <= 3
         and persona.get("department")
         and persona["department"] in section.get("departments", [])
     ):
-        if mode < 4:
-            mode = min(mode + 1, 4)
+        if mode > 0:
+            mode = max(mode - 1, 0)
             reasons.append(f"부서 관련성(+1): {persona['department']} 담당 데이터 → {MODE_NAMES[mode]}")
 
-    # 판단/집계 질의: A1/A2 판정 섹션을 A3(노출 제한)로 승격
+    # 판단/집계 질의: A2/A3 판정 섹션을 A1(노출 제한)로 완화
     if (
         purpose == "judgment"
-        and modifiers.get("judgment_a3", {}).get("enabled")
-        and base >= 1
-        and mode < 3
+        and modifiers.get("judgment_a1", {}).get("enabled")
+        and base <= 3
+        and mode > 1
     ):
-        mode = 3
-        reasons.append("판단/집계 질의: 추론 근거 전용(A3)으로 승격 — 내용 직접 언급 금지")
+        mode = 1
+        reasons.append("판단/집계 질의: 추론 근거 전용(A1)으로 완화 — 내용 직접 언급 금지")
 
     return Decision(mode, base, d, c, gap, reasons)
 

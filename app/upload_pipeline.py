@@ -1,4 +1,9 @@
-"""Runtime document upload and Gemini classification pipeline."""
+"""Runtime document upload and Gemini classification pipeline.
+
+분류는 문서 전체를 Gemini에 1회 호출(배치)로 보내 모든 문단 라벨을 한 번에 받는다
+(문단별 순차 호출은 문단 수에 비례해 느려져 FE 타임아웃을 유발했다). 배치 응답에서
+누락·불량인 섹션만 기존 문단별 호출로 폴백한다.
+"""
 
 from __future__ import annotations
 
@@ -19,6 +24,7 @@ from app.ingest import CLASSIFY_SYSTEM, KEYWORDS_PATH, assign_placeholders
 
 MAX_UPLOAD_CHARS = 80_000
 CLASSIFY_TIMEOUT_SECONDS = 45
+BATCH_CLASSIFY_TIMEOUT_SECONDS = 90
 LOG = logging.getLogger("uvicorn.error")
 
 
@@ -34,6 +40,12 @@ class SectionLabel(BaseModel):
     departments: list[str] = Field(default_factory=list)
     summary_generalized: str
     entities: list[EntityLabel] = Field(default_factory=list)
+
+
+class BatchSectionLabel(SectionLabel):
+    """문서 전체 1회 분류 응답의 항목 — 어느 섹션의 라벨인지 id로 매칭한다."""
+
+    id: str
 
 
 @dataclass
@@ -256,6 +268,97 @@ def _classify_with_timeout(section: dict, client=None) -> SectionLabel:
         executor.shutdown(wait=False, cancel_futures=True)
 
 
+def _extract_json_array(text: str) -> list:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+    try:
+        payload = json.loads(cleaned)
+    except json.JSONDecodeError:
+        start = cleaned.find("[")
+        end = cleaned.rfind("]")
+        if start >= 0 and end > start:
+            payload = json.loads(cleaned[start:end + 1])
+        else:
+            raise
+    if isinstance(payload, dict):  # {"sections": [...]} 형태 관용 처리
+        for value in payload.values():
+            if isinstance(value, list):
+                return value
+        return [payload]
+    return payload if isinstance(payload, list) else []
+
+
+def _batch_items_to_labels(items: list) -> dict[str, SectionLabel]:
+    """배치 응답 항목들을 섹션 id → SectionLabel 매핑으로 정규화. 불량 항목은 건너뛴다."""
+    labels: dict[str, SectionLabel] = {}
+    for item in items:
+        if isinstance(item, BatchSectionLabel):
+            labels.setdefault(item.id, SectionLabel.model_validate(item.model_dump(exclude={"id"})))
+            continue
+        if isinstance(item, BaseModel):
+            item = item.model_dump()
+        if not isinstance(item, dict):
+            continue
+        section_id = str(item.get("id") or "").strip()
+        if not section_id:
+            continue
+        try:
+            payload = _normalize_label_payload({k: v for k, v in item.items() if k != "id"})
+            labels.setdefault(section_id, SectionLabel.model_validate(payload))
+        except ValidationError:
+            LOG.warning("[upload] batch item invalid — fallback to per-section id=%s", section_id)
+    return labels
+
+
+def _classify_document_with_gemini(sections: list[dict], client=None) -> dict[str, SectionLabel]:
+    """문서 전체를 1회 호출로 분류해 섹션 id → 라벨 매핑을 반환한다."""
+    if client is None:
+        from google import genai
+        client = genai.Client()
+    from google.genai import types
+
+    blocks = "\n\n".join(
+        f'<section id="{s["id"]}" title="{s["title"]}">\n{s["text"]}\n</section>'
+        for s in sections
+    )
+    prompt = (
+        "아래 문서의 모든 <section>을 각각 보안 등급 JSON으로 분류해 JSON 배열로만 답하세요.\n"
+        "배열의 각 항목 keys: id, security_level, confidence, keywords, departments, "
+        "summary_generalized, entities.\n"
+        "id는 해당 <section>의 id 속성을 그대로 복사합니다. 섹션 수와 항목 수가 같아야 합니다.\n"
+        "entities는 반드시 객체 배열입니다. 예: [{\"text\":\"한빛전자\",\"type\":\"고객사\"}].\n"
+        "각 섹션은 문서 전체 맥락을 반영해 판단하되, 등급은 섹션 자체 내용 기준으로 부여하세요.\n\n"
+        f"문서: {sections[0]['doc_title']}\n\n{blocks}"
+    )
+    response = client.models.generate_content(
+        model=llm_model(),
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=_classification_system_prompt(),
+            response_mime_type="application/json",
+            response_schema=list[BatchSectionLabel],
+        ),
+    )
+    parsed = getattr(response, "parsed", None)
+    items = parsed if isinstance(parsed, list) else _extract_json_array(getattr(response, "text", "") or "")
+    return _batch_items_to_labels(items)
+
+
+def _classify_document_with_timeout(sections: list[dict], client=None) -> dict[str, SectionLabel]:
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(_classify_document_with_gemini, sections, client)
+    try:
+        return future.result(timeout=BATCH_CLASSIFY_TIMEOUT_SECONDS)
+    except TimeoutError as exc:
+        raise RuntimeError(
+            f"Gemini 문서 분류가 {BATCH_CLASSIFY_TIMEOUT_SECONDS}초 안에 끝나지 않았습니다."
+        ) from exc
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
 def classify_and_store(filename: str, content: str, client=None) -> dict:
     if not has_llm_credentials() and client is None:
         raise RuntimeError("GEMINI_API_KEY 또는 GOOGLE_API_KEY가 필요합니다.")
@@ -267,22 +370,39 @@ def classify_and_store(filename: str, content: str, client=None) -> dict:
         uploaded.doc,
         len(uploaded.sections),
     )
+
+    # 1차: 문서 전체 1회 호출 배치 분류 (실패해도 문단별 폴백이 있으므로 치명적이지 않다)
+    batch_labels: dict[str, SectionLabel] = {}
+    try:
+        batch_labels = _classify_document_with_timeout(uploaded.sections, client=client)
+        LOG.info(
+            "[upload] batch classified doc=%s labels=%s/%s",
+            uploaded.doc,
+            len(batch_labels),
+            len(uploaded.sections),
+        )
+    except (ValidationError, json.JSONDecodeError, RuntimeError):
+        LOG.exception("[upload] batch classify failed — falling back per-section doc=%s", uploaded.doc)
+
     classified: list[dict] = []
     for section in uploaded.sections:
-        try:
-            LOG.info(
-                "[upload] classify section=%s title=%s chars=%s",
-                section["id"],
-                section["title"],
-                len(section["text"]),
-            )
-            label = _classify_with_timeout(section, client=client)
-        except (ValidationError, json.JSONDecodeError) as exc:
-            LOG.exception("[upload] invalid Gemini response section=%s", section["id"])
-            raise RuntimeError(f"Gemini 분류 응답을 해석하지 못했습니다: {exc}") from exc
-        except RuntimeError:
-            LOG.exception("[upload] classify failed section=%s", section["id"])
-            raise
+        label = batch_labels.get(section["id"])
+        if label is None:
+            # 2차: 배치 응답에 없거나 불량인 섹션만 문단별 호출로 폴백
+            try:
+                LOG.info(
+                    "[upload] fallback classify section=%s title=%s chars=%s",
+                    section["id"],
+                    section["title"],
+                    len(section["text"]),
+                )
+                label = _classify_with_timeout(section, client=client)
+            except (ValidationError, json.JSONDecodeError) as exc:
+                LOG.exception("[upload] invalid Gemini response section=%s", section["id"])
+                raise RuntimeError(f"Gemini 분류 응답을 해석하지 못했습니다: {exc}") from exc
+            except RuntimeError:
+                LOG.exception("[upload] classify failed section=%s", section["id"])
+                raise
         row = dict(section)
         row.update(label.model_dump())
         row["entities"] = [dict(e) for e in row["entities"] if e.get("text") and e["text"] in row["text"]]

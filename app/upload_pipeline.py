@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass
 
 import yaml
@@ -16,6 +17,7 @@ from app.ingest import CLASSIFY_SYSTEM, KEYWORDS_PATH, assign_placeholders
 
 
 MAX_UPLOAD_CHARS = 80_000
+CLASSIFY_TIMEOUT_SECONDS = 45
 
 
 class EntityLabel(BaseModel):
@@ -232,6 +234,20 @@ def _classify_with_gemini(section: dict, client=None) -> SectionLabel:
     return SectionLabel.model_validate(_normalize_label_payload(payload))
 
 
+def _classify_with_timeout(section: dict, client=None) -> SectionLabel:
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(_classify_with_gemini, section, client)
+    try:
+        return future.result(timeout=CLASSIFY_TIMEOUT_SECONDS)
+    except TimeoutError as exc:
+        raise RuntimeError(
+            f"Gemini 분류가 {CLASSIFY_TIMEOUT_SECONDS}초 안에 끝나지 않았습니다. "
+            "문서를 더 작은 단위로 나누거나 잠시 후 다시 시도해주세요."
+        ) from exc
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
 def classify_and_store(filename: str, content: str, client=None) -> dict:
     if not has_llm_credentials() and client is None:
         raise RuntimeError("GEMINI_API_KEY 또는 GOOGLE_API_KEY가 필요합니다.")
@@ -240,7 +256,7 @@ def classify_and_store(filename: str, content: str, client=None) -> dict:
     classified: list[dict] = []
     for section in uploaded.sections:
         try:
-            label = _classify_with_gemini(section, client=client)
+            label = _classify_with_timeout(section, client=client)
         except (ValidationError, json.JSONDecodeError) as exc:
             raise RuntimeError(f"Gemini 분류 응답을 해석하지 못했습니다: {exc}") from exc
         row = dict(section)

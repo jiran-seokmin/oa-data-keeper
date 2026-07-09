@@ -1,6 +1,6 @@
 """질의 파이프라인: 판정 → 모드별 변환 → 답변 생성 → 출력 가드.
 
-시드 코퍼스가 작으므로 RAG 없이 A0 제외 전 섹션을 프롬프트에 삽입한다.
+시드 코퍼스가 작으므로 RAG 없이 A4(접근 차단) 제외 전 섹션을 프롬프트에 삽입한다.
 (실데이터 확장 시 메타데이터 사전 필터가 붙은 벡터 검색으로 대체 — CONCEPT.md 참조)
 """
 
@@ -25,10 +25,10 @@ SYSTEM_TEMPLATE = """당신은 가온테크의 팀 지식 어시스턴트 '세�
 
 아래 <sections>의 자료만 근거로 한국어로 간결하게 답하세요. 각 블록의 접근 모드 규칙:
 
-- [A4 전체 접근]: 자유롭게 인용 가능.
+- [A0 전체 접근]: 자유롭게 인용 가능.
+- [A1 배경 전용]: 판단·집계·가능성 평가의 근거로만 사용하세요. 이 블록의 고유명사, 수치, 금액, 조건을 답변에 직접 인용하거나 언급하는 것은 절대 금지입니다. 정성적 결론(가능/어려움/근접 등)만 말하세요.
 - [A2 의미 제한]: 제공된 일반화 요약 수준까지만 언급 가능. 요약에 없는 구체 정보(사명, 금액, 인명)를 추측하거나 언급하지 마세요.
-- [A1 마스킹]: 본문의 [고객사A] 같은 플레이스홀더를 그대로 사용하세요. 원래 값을 추측·복원하지 마세요.
-- [A3 배경 전용]: 판단·집계·가능성 평가의 근거로만 사용하세요. 이 블록의 고유명사, 수치, 금액, 조건을 답변에 직접 인용하거나 언급하는 것은 절대 금지입니다. 정성적 결론(가능/어려움/근접 등)만 말하세요.
+- [A3 정보 마스킹]: 본문의 [고객사A] 같은 플레이스홀더를 그대로 사용하세요. 원래 값을 추측·복원하지 마세요.
 
 공통 규칙:
 - 제공된 자료에 없는 내용은 "해당 정보는 접근 권한이 필요합니다"라고 안내하세요.
@@ -85,24 +85,24 @@ def mask_text(text: str, entities: list[dict]) -> str:
 def render_block(section: dict, decision: Decision) -> str | None:
     header = f"{section['doc_title']} › {section['title']}"
     if decision.mode == 0:
-        return None  # A0: 프롬프트 진입 자체를 차단
+        return f"[A0 전체 접근 | {header}]\n{section['text']}"
     if decision.mode == 1:
-        body = mask_text(section["text"], section.get("entities", []))
-        return f"[A1 마스킹 | {header}]\n{body}"
+        return f"[A1 배경 전용 | {header}]\n{section['text']}"
     if decision.mode == 2:
         return f"[A2 의미 제한 | {header}]\n(일반화 요약) {section['summary_generalized']}"
     if decision.mode == 3:
-        return f"[A3 배경 전용 | {header}]\n{section['text']}"
-    return f"[A4 전체 접근 | {header}]\n{section['text']}"
+        body = mask_text(section["text"], section.get("entities", []))
+        return f"[A3 정보 마스킹 | {header}]\n{body}"
+    return None  # A4: 프롬프트 진입 자체를 차단
 
 
 def forbidden_strings(decisions: list[tuple[dict, Decision]]) -> list[str]:
-    """유출 스캔 대상: 제한 모드(A0/A1/A2/A3) 섹션의 엔티티 − A4 섹션에서 이미 허용된 엔티티."""
-    allowed = {e["text"] for s, d in decisions if d.mode == 4 for e in s.get("entities", [])}
+    """유출 스캔 대상: 제한 모드(A1/A2/A3/A4) 섹션의 엔티티 − A0 섹션에서 이미 허용된 엔티티."""
+    allowed = {e["text"] for s, d in decisions if d.mode == 0 for e in s.get("entities", [])}
     forbidden = {
         e["text"]
         for s, d in decisions
-        if d.mode in (0, 1, 2, 3)
+        if d.mode in (1, 2, 3, 4)
         for e in s.get("entities", [])
     }
     return sorted((forbidden - allowed), key=len, reverse=True)

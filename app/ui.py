@@ -24,9 +24,9 @@ from app.pipeline import load_personas, load_policy, load_sections
 
 st.set_page_config(page_title="DataKeeper — 접근 제어 엔진 데모", page_icon="🔐", layout="wide")
 
-MODE_BADGES = {0: "🚫", 1: "🎭", 2: "🔍", 3: "🧠", 4: "✅"}
-MODE_COLORS = {0: "#f1f3f4", 1: "#fde2cd", 2: "#fff3bf", 3: "#e6dcf7", 4: "#d3f1e0"}
-MODE_TEXT = {0: "#5f6368", 1: "#a4540a", 2: "#8a6d00", 3: "#5b3fa8", 4: "#0b6e4f"}
+MODE_BADGES = {0: "✅", 1: "🧠", 2: "🔍", 3: "🎭", 4: "🚫"}
+MODE_COLORS = {0: "#d3f1e0", 1: "#e6dcf7", 2: "#fff3bf", 3: "#fde2cd", 4: "#f1f3f4"}
+MODE_TEXT = {0: "#0b6e4f", 1: "#5b3fa8", 2: "#8a6d00", 3: "#a4540a", 4: "#5f6368"}
 LEVEL_COLORS = {0: "#2a9d8f", 1: "#6c9a3f", 2: "#e9a03b", 3: "#d1495b", 4: "#7b2d43"}
 
 
@@ -64,7 +64,7 @@ def mode_badge(d: Decision) -> str:
 
 
 def masked_html(section: dict) -> str:
-    """A1: 엔티티를 하이라이트된 플레이스홀더로 치환한 본문 HTML."""
+    """A3: 엔티티를 하이라이트된 플레이스홀더로 치환한 본문 HTML."""
     text = section["text"]
     for e in sorted(section.get("entities", []), key=lambda e: len(e["text"]), reverse=True):
         text = text.replace(e["text"], f"\x00{e['placeholder']}\x01")
@@ -83,14 +83,16 @@ def render_section(section: dict, d: Decision) -> None:
         )
         st.caption(f"gap={d.gap} · " + " / ".join(d.reasons))
 
-        if d.mode == 0:
+        if d.mode == 4:
             st.markdown(
                 '<div style="color:#9aa0a6;padding:6px 0">🔒 접근 차단 — 이 섹션은 현재 사용자에게 제공되지 않습니다.</div>',
                 unsafe_allow_html=True,
             )
         elif d.mode == 1:
             st.markdown(
-                f'<div style="line-height:1.7">{masked_html(section)}</div>',
+                '<div style="color:#5b3fa8;font-size:0.85rem;margin-bottom:4px">'
+                "🧠 AI 추론 근거로만 사용 가능 — 직접 열람 불가 (Phase 2 질의응답에서 판단·집계에만 활용)</div>"
+                f'<div style="filter:blur(5px);user-select:none;pointer-events:none;line-height:1.7">{esc(section["text"])}</div>',
                 unsafe_allow_html=True,
             )
         elif d.mode == 2:
@@ -101,9 +103,7 @@ def render_section(section: dict, d: Decision) -> None:
             )
         elif d.mode == 3:
             st.markdown(
-                '<div style="color:#5b3fa8;font-size:0.85rem;margin-bottom:4px">'
-                "🧠 AI 추론 근거로만 사용 가능 — 직접 열람 불가 (Phase 2 질의응답에서 판단·집계에만 활용)</div>"
-                f'<div style="filter:blur(5px);user-select:none;pointer-events:none;line-height:1.7">{esc(section["text"])}</div>',
+                f'<div style="line-height:1.7">{masked_html(section)}</div>',
                 unsafe_allow_html=True,
             )
         else:
@@ -147,9 +147,9 @@ def tab_viewer(sections, policy, persona, purpose):
     def label(item):
         doc, title = item
         modes = [decide(s, persona, policy, purpose).mode for s in by_doc[doc]]
-        if all(m == 0 for m in modes):
+        if all(m == 4 for m in modes):
             return f"🔒 {title}"
-        if any(m < 4 for m in modes):
+        if any(m > 0 for m in modes):
             return f"🔐 {title}"
         return f"📄 {title}"
 
@@ -271,9 +271,9 @@ def main():
         )
         st.divider()
         judgment = st.toggle(
-            "판단/집계 목적 (A3 승격)",
+            "판단/집계 목적 (A1 완화)",
             value=False,
-            help="판단·집계 목적의 접근이면 A1/A2 판정 섹션이 A3(AI 추론 근거 전용)로 승격됩니다. D4는 승격되지 않습니다.",
+            help="판단·집계 목적의 접근이면 A2/A3 판정 섹션이 A1(AI 추론 근거 전용)로 완화됩니다. D4는 완화되지 않습니다.",
         )
         st.divider()
         n_docs = len({s["doc"] for s in sections})

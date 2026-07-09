@@ -31,6 +31,21 @@ class FakeClient:
         self.messages = FakeMessages()
 
 
+class FakeInteractions:
+    def __init__(self):
+        self.calls = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        text = "실드락 인수 건은 검토 중입니다." if len(self.calls) == 1 else "[기업명A] 인수 건은 검토 중입니다."
+        return SimpleNamespace(output_text=text)
+
+
+class FakeGeminiClient:
+    def __init__(self):
+        self.interactions = FakeInteractions()
+
+
 def check(name, cond):
     print(f"[{'OK ' if cond else 'FAIL'}] {name}")
     assert cond, name
@@ -77,6 +92,13 @@ def main():
     check("출력 가드 유출 감지", result.guard.triggered is True)
     check("출력 가드 1회 재시도", result.guard.retried is True and len(client.messages.calls) == 2)
     check("최종 답변은 마스킹 플레이스홀더 유지", result.answer == "[기업명A] 인수 건은 검토 중입니다.")
+
+    gemini = FakeGeminiClient()
+    result_gemini = pipeline.answer("인수 검토", SALES_REP, sections=sections, policy=POLICY, client=gemini)
+    first_call = gemini.interactions.calls[0]
+    check("Gemini는 interactions.create 호출", "system_instruction" in first_call and "input" in first_call)
+    check("Gemini 프롬프트에 원문 엔티티 미포함", "실드락" not in first_call["system_instruction"])
+    check("Gemini 출력 가드 재시도", result_gemini.guard.retried is True and len(gemini.interactions.calls) == 2)
 
     print("\n전체 테스트 통과 ✅")
 

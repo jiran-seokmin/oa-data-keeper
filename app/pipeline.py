@@ -6,7 +6,6 @@ LLM 프롬프트에 삽입한다. A4 섹션은 검색 결과와 프롬프트 모
 
 from __future__ import annotations
 
-import os
 import sqlite3
 from dataclasses import asdict
 from dataclasses import dataclass, field
@@ -14,13 +13,14 @@ from pathlib import Path
 
 from app.engine import Decision, decide, load_yaml
 from app import store
+from app.config import llm_model, llm_provider, load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
 SECTIONS_PATH = ROOT / "data" / "sections.json"
 POLICY_PATH = ROOT / "app" / "policy.yaml"
 PERSONAS_PATH = ROOT / "app" / "personas.yaml"
 
-MODEL = os.environ.get("ACE_MODEL", "claude-opus-4-8")
+load_dotenv()
 
 SYSTEM_TEMPLATE = """당신은 가온테크의 팀 지식 어시스턴트 '세이프브레인'입니다.
 현재 사용자: {persona_name} (접근 등급 C{clearance}, 소속: {department})
@@ -120,9 +120,29 @@ def scan_leaks(answer: str, forbidden: list[str]) -> list[str]:
     return [f for f in forbidden if len(f) >= 2 and f in answer]
 
 
+def _create_llm_client():
+    provider = llm_provider()
+    if provider == "gemini":
+        from google import genai
+        return genai.Client()
+    if provider == "anthropic":
+        import anthropic
+        return anthropic.Anthropic()
+    raise ValueError(f"지원하지 않는 ACE_PROVIDER입니다: {provider}")
+
+
 def _generate(client, system: str, question: str) -> str:
+    model = llm_model()
+    if hasattr(client, "interactions"):
+        interaction = client.interactions.create(
+            model=model,
+            system_instruction=system,
+            input=question,
+        )
+        return getattr(interaction, "output_text", "") or ""
+
     response = client.messages.create(
-        model=MODEL,
+        model=model,
         max_tokens=16000,
         thinking={"type": "adaptive"},
         system=system,
@@ -169,8 +189,7 @@ def answer(
     if policy is None:
         policy = load_policy()
     if client is None:
-        import anthropic
-        client = anthropic.Anthropic()
+        client = _create_llm_client()
 
     from app import retrieval
 

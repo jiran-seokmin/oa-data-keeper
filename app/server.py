@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import os
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,11 +21,14 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app import pipeline, retrieval, store
+from app.config import has_llm_credentials, llm_provider, load_dotenv
 from app.engine import decide
 from app.pipeline import load_policy
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB_DIST_DIR = ROOT / "app" / "web" / "dist"
+
+load_dotenv()
 
 app = FastAPI(title="DataKeeper 접근제어 챗")
 app.add_middleware(
@@ -85,8 +87,10 @@ def search(req: SearchReq) -> dict:
 
 @app.post("/api/chat")
 def chat(req: SearchReq) -> dict:
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY가 없어 LLM 답변 모드를 사용할 수 없습니다.")
+    if not has_llm_credentials():
+        provider = llm_provider()
+        key_name = "GEMINI_API_KEY 또는 GOOGLE_API_KEY" if provider == "gemini" else "ANTHROPIC_API_KEY"
+        raise HTTPException(status_code=503, detail=f"{key_name}가 없어 LLM 답변 모드를 사용할 수 없습니다.")
 
     persona = _persona_or_404(req.persona_id)
     purpose = req.purpose if req.purpose in ("info", "judgment") else "info"

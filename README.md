@@ -28,8 +28,27 @@ cd app/web && npm install && npm run build && cd ../..
 
 - **MVP 데모(문서 뷰어, 판정 매트릭스)는 API 호출 없이 결정론적으로 동작**한다.
 - 라이브 분류로 라벨을 다시 만들려면: `.venv/bin/python -m app.ingest` (`ANTHROPIC_API_KEY` 필요).
-- Phase E LLM 답변 모드(`/api/chat`)는 `ANTHROPIC_API_KEY` 필요. 키가 없거나 모델 호출이 실패하면 웹 FE가 자동으로 `/api/search` 조회 모드로 폴백한다.
-- 모델 변경: `ACE_MODEL` (기본 `claude-opus-4-8`).
+- Phase E LLM 답변 모드(`/api/chat`)는 `.env` 또는 쉘 환경변수로 API 키가 필요하다. 키가 없거나 모델 호출이 실패하면 웹 FE가 자동으로 `/api/search` 조회 모드로 폴백한다.
+- 기본 provider는 Gemini다. `GEMINI_API_KEY` 또는 `GOOGLE_API_KEY`를 설정하면 Gemini SDK가 자동으로 사용한다.
+- 모델 변경: `ACE_MODEL` (Gemini 기본 `gemini-3.5-flash`, Anthropic 기본 `claude-opus-4-8`).
+
+`.env` 예시:
+
+```bash
+cp .env.example .env
+# .env 파일에 GEMINI_API_KEY 값을 입력
+ACE_PROVIDER=gemini
+GEMINI_API_KEY=your-gemini-api-key
+ACE_MODEL=gemini-3.5-flash
+```
+
+Anthropic을 쓰려면:
+
+```bash
+ACE_PROVIDER=anthropic
+ANTHROPIC_API_KEY=your-anthropic-api-key
+ACE_MODEL=claude-opus-4-8
+```
 
 프론트엔드 개발 서버:
 

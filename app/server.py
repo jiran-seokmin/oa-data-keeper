@@ -127,7 +127,7 @@ def matrix() -> dict:
                         "mode_name": MODE_NAMES[dec.mode], "reason": " · ".join(dec.reasons),
                     })
                 rows.append({
-                    "id": s["id"], "doc_title": d["doc_title"], "title": s["title"],
+                    "id": s["id"], "doc": d["doc"], "doc_title": d["doc_title"], "title": s["title"],
                     "d": s["security_level"], "cells": cells,
                 })
         return {"personas": personas, "rows": rows}

@@ -12,6 +12,61 @@ body {
 }
 img { display: block; }
 
+/* 채팅 Markdown */
+.dk-markdown {
+  color: #384252;
+  font-size: 13.5px;
+  line-height: 1.65;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.dk-markdown > :first-child { margin-top: 0; }
+.dk-markdown > :last-child { margin-bottom: 0; }
+.dk-markdown p { margin: 0 0 8px; }
+.dk-markdown strong { color: #111827; font-weight: 700; }
+.dk-markdown em { color: #4B5563; }
+.dk-markdown ul,
+.dk-markdown ol {
+  margin: 6px 0 10px;
+  padding-left: 20px;
+}
+.dk-markdown li { margin: 3px 0; }
+.dk-markdown li > p { margin: 3px 0; }
+.dk-markdown code {
+  border: 1px solid #E5E7EB;
+  border-radius: 5px;
+  background: #F9FAFB;
+  color: #111827;
+  padding: 1px 5px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+.dk-markdown pre {
+  margin: 8px 0 10px;
+  overflow: auto;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  background: #111827;
+  padding: 10px 12px;
+}
+.dk-markdown pre code {
+  border: 0;
+  background: transparent;
+  color: #F9FAFB;
+  padding: 0;
+}
+.dk-markdown blockquote {
+  margin: 8px 0;
+  border-left: 3px solid #D1D5DB;
+  padding-left: 10px;
+  color: #4B5563;
+}
+.dk-markdown a {
+  color: #1E40AF;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* 앱 셸 */
 .dk-app {
   display: flex;

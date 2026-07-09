@@ -13,8 +13,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
+
+from app.db import DB_PATH, get_conn, init_db
 
 # 파서·플레이스홀더 로직은 기존 수집 파이프라인 것을 재사용한다 (중복 구현 금지).
 from app.ingest import assign_placeholders, split_sections
@@ -325,6 +328,70 @@ def build_sections() -> tuple[list[dict], list[str]]:
     return all_sections, missing
 
 
+def seed(db_path: str | Path = DB_PATH) -> dict:
+    """samples를 파싱·병합해 SQLite에 직접 INSERT한다. 요약 통계를 반환."""
+    sections, missing = build_sections()
+
+    conn = get_conn(db_path)
+    try:
+        init_db(conn, reset=True)
+
+        # documents (doc 단위 dedup)
+        docs: dict[str, str] = {}
+        for s in sections:
+            docs.setdefault(s["doc"], s["doc_title"])
+        conn.executemany(
+            "INSERT INTO documents(doc, doc_title, source_path) VALUES (?,?,?)",
+            [(doc, title, f"data/samples/{doc}.md") for doc, title in docs.items()],
+        )
+
+        # sections
+        conn.executemany(
+            """INSERT INTO sections
+               (id, doc, seq, title, text, security_level, confidence,
+                needs_review, keywords, departments, summary_generalized)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            [
+                (
+                    s["id"], s["doc"], int(s["id"].split("#")[1]), s["title"], s["text"],
+                    s["security_level"], s["confidence"], 1 if s["needs_review"] else 0,
+                    json.dumps(s["keywords"], ensure_ascii=False),
+                    json.dumps(s["departments"], ensure_ascii=False),
+                    s["summary_generalized"],
+                )
+                for s in sections
+            ],
+        )
+
+        # entities (섹션 내 순서 보존)
+        conn.executemany(
+            "INSERT INTO entities(section_id, seq, text, placeholder, type) VALUES (?,?,?,?,?)",
+            [
+                (s["id"], i, e["text"], e["placeholder"], e.get("type"))
+                for s in sections
+                for i, e in enumerate(s["entities"])
+            ],
+        )
+
+        # personas
+        conn.executemany(
+            "INSERT INTO personas(id, name, clearance, department, channel) VALUES (?,?,?,?,?)",
+            [(p["id"], p["name"], p["clearance"], p["department"], p["channel"]) for p in PERSONAS],
+        )
+        conn.commit()
+
+        stats = {
+            "documents": conn.execute("SELECT count(*) FROM documents").fetchone()[0],
+            "sections": conn.execute("SELECT count(*) FROM sections").fetchone()[0],
+            "entities": conn.execute("SELECT count(*) FROM entities").fetchone()[0],
+            "personas": conn.execute("SELECT count(*) FROM personas").fetchone()[0],
+            "missing": missing,
+        }
+        return stats
+    finally:
+        conn.close()
+
+
 def report() -> int:
     """A1 검증용: 등급 병합 결과와 미매칭 섹션을 출력한다 (DB 미생성)."""
     sections, missing = build_sections()
@@ -360,10 +427,16 @@ def main() -> None:
     parser.add_argument("--reset", action="store_true", help="스키마 재생성 후 samples 시딩 (A3에서 구현)")
     args = parser.parse_args()
 
-    if args.report or not args.reset:
+    if args.report:
         raise SystemExit(report())
 
-    raise SystemExit("A3에서 DB 시딩 구현 예정 (--reset)")
+    stats = seed()
+    print(f"시딩 완료: {DB_PATH}")
+    print(f"  documents={stats['documents']} sections={stats['sections']} "
+          f"entities={stats['entities']} personas={stats['personas']}")
+    if stats["missing"]:
+        print(f"⚠ GRADES 미지정(→D4 격리): {stats['missing']}", file=sys.stderr)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

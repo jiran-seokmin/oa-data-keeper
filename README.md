@@ -13,11 +13,12 @@
 uv venv .venv
 uv pip install -r requirements.txt --python .venv/bin/python
 
-# 1) 수집 파이프라인 (사전 분류 라벨 사용 — API 불필요)
-.venv/bin/python -m app.ingest --offline
+# 1) SQLite 시딩 (런타임 LLM/API 불필요)
+.venv/bin/python -m app.seed_db --reset
 
-# 2) 데모 UI — 뷰어·매트릭스는 API 키 없이 완전 동작
-.venv/bin/streamlit run app/ui.py
+# 2) assistant-ui 기반 웹 챗
+cd app/web && npm install && npm run build && cd ../..
+.venv/bin/uvicorn app.server:app --reload --port 8000
 
 # 콘솔에서 문서별 접근 결과 확인 (LLM/API 불필요)
 .venv/bin/python -m app.view_access --list-docs
@@ -27,7 +28,16 @@ uv pip install -r requirements.txt --python .venv/bin/python
 
 - **MVP 데모(문서 뷰어, 판정 매트릭스)는 API 호출 없이 결정론적으로 동작**한다.
 - 라이브 분류로 라벨을 다시 만들려면: `.venv/bin/python -m app.ingest` (`ANTHROPIC_API_KEY` 필요).
-- Phase 2 질의응답 탭도 `ANTHROPIC_API_KEY` 필요. 모델 변경: `ACE_MODEL` (기본 `claude-opus-4-8`).
+- Phase E LLM 답변 모드(`/api/chat`)는 `ANTHROPIC_API_KEY` 필요. 키가 없거나 모델 호출이 실패하면 웹 FE가 자동으로 `/api/search` 조회 모드로 폴백한다.
+- 모델 변경: `ACE_MODEL` (기본 `claude-opus-4-8`).
+
+프론트엔드 개발 서버:
+
+```bash
+cd app/web
+npm install
+npm run dev  # http://127.0.0.1:5173, /api는 FastAPI 8000번으로 프록시
+```
 
 ## 데모 흐름
 
@@ -54,6 +64,8 @@ app/
   ingest.py      수집: 섹션 분리 → 분류 → sections.json
   pipeline.py    [Phase 2] 질의: 판정 → 모드별 변환 → 생성 → 출력 가드
   ui.py          Streamlit 데모 (문서 뷰어 + 매트릭스 + 수집 결과 + 감사 로그)
+  server.py      FastAPI 백엔드 (/api/search, /api/chat, 빌드된 React FE 서빙)
+  web/           React + assistant-ui 프론트엔드
   view_access.py CLI 문서 접근 결과 뷰어 (LLM/API 미사용)
 data/
   seed/          가상 회사 문서 12개 (D0~D4 혼재)

@@ -6,6 +6,7 @@
   GET  /api/personas               페르소나 목록
   GET  /api/documents?persona_id=  문서 목록 + 페르소나별 lock 상태
   POST /api/search                 접근제어 키워드 검색 (무-LLM, P0 핵심)
+  POST /api/chat                   Phase E LLM 답변 + 출력 가드 (키 없으면 503)
 
 접근 판정은 항상 engine.decide()를 경유한다 (판정에 LLM 미사용).
 """
@@ -13,18 +14,19 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import retrieval, store
+from app import pipeline, retrieval, store
 from app.engine import decide
 from app.pipeline import load_policy
 
 ROOT = Path(__file__).resolve().parent.parent
-WEB_DIR = ROOT / "app" / "web"
+WEB_DIST_DIR = ROOT / "app" / "web" / "dist"
 
 app = FastAPI(title="DataKeeper 접근제어 챗")
 app.add_middleware(
@@ -81,6 +83,28 @@ def search(req: SearchReq) -> dict:
     return {"persona": persona, "purpose": purpose, "query": req.question, "results": results}
 
 
-# 정적 프론트 서빙 (app/web). API 라우트 뒤에 마운트해야 /api/* 가 우선한다.
-if WEB_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
+@app.post("/api/chat")
+def chat(req: SearchReq) -> dict:
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY가 없어 LLM 답변 모드를 사용할 수 없습니다.")
+
+    persona = _persona_or_404(req.persona_id)
+    purpose = req.purpose if req.purpose in ("info", "judgment") else "info"
+    try:
+        result = pipeline.answer(req.question, persona, purpose, policy=POLICY)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"LLM 답변 생성 실패: {exc}") from exc
+
+    return {
+        "answer": result.answer,
+        "used_sections": result.used_sections,
+        "guard": pipeline.guard_to_dict(result.guard),
+        "persona": result.persona,
+        "purpose": result.purpose,
+        "query": result.question,
+    }
+
+
+# 정적 프론트 서빙 (app/web/dist). API 라우트 뒤에 마운트해야 /api/* 가 우선한다.
+if WEB_DIST_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(WEB_DIST_DIR), html=True), name="web")

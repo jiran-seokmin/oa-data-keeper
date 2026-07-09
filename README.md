@@ -10,7 +10,7 @@
 ## 빠른 시작
 
 ```bash
-uv venv .venv
+uv venv .venv --relocatable  # --relocatable: 저장소를 옮겨도 스크립트 shebang이 깨지지 않음
 uv pip install -r requirements.txt --python .venv/bin/python
 
 # 1) .env 설정 (서비스 실행 시 필수)

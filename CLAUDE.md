@@ -23,7 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 명령어
 
 ```bash
-uv venv .venv && uv pip install -r requirements.txt --python .venv/bin/python  # 셋업
+uv venv .venv --relocatable && uv pip install -r requirements.txt --python .venv/bin/python  # 셋업 (--relocatable: 저장소를 옮겨도 스크립트 shebang이 깨지지 않음)
 .venv/bin/python -m app.init_samples --reset  # 명시적 샘플 DB 초기화: data/samples → SQLite(datakeeper.db), API 불필요
 .venv/bin/python -m app.init_samples --report # 등급 시드 병합·미매칭 점검 (DB 미생성)
 .venv/bin/python tests/test_engine.py       # 판정 엔진 시나리오 테스트 (pytest 아님, 직접 실행)

@@ -95,6 +95,17 @@ def main():
     check("출력 가드 1회 재시도", result.guard.retried is True and len(client.messages.calls) == 2)
     check("최종 답변은 마스킹 플레이스홀더 유지", result.answer == "[기업명A] 인수 건은 검토 중입니다.")
 
+    # ── A1(노출 제한): C3는 원문을 '배경 전용'으로 프롬프트에 받아 추론하되, 출력가드가 유출 방어 ──
+    SALES_LEAD = {"name": "영업팀장", "clearance": 3, "department": "영업팀", "channel": "internal"}
+    lead_client = FakeClient()
+    result_lead = pipeline.answer("인수 검토", SALES_LEAD, sections=sections, policy=POLICY, client=lead_client)
+    lead_system = lead_client.messages.calls[0]["system"]
+    check("C3 × D4는 A1 노출제한으로 판정", result_lead.used_sections[0]["mode"] == 1)
+    check("A1: 원문이 '배경 전용' 태그로 프롬프트 진입 (LLM 추론 근거)",
+          "[A1 배경 전용" in lead_system and "실드락" in lead_system)
+    check("A1: LLM 유출 시 출력가드 재시도", result_lead.guard.retried is True)
+    check("A1: 최종 답변에 원문 엔티티 미포함", "실드락" not in result_lead.answer)
+
     gemini = FakeGeminiClient()
     result_gemini = pipeline.answer("인수 검토", SALES_REP, sections=sections, policy=POLICY, client=gemini)
     first_call = gemini.models.calls[0]

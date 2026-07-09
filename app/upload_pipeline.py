@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from app.ingest import CLASSIFY_SYSTEM, KEYWORDS_PATH, assign_placeholders
 
 MAX_UPLOAD_CHARS = 80_000
 CLASSIFY_TIMEOUT_SECONDS = 45
+LOG = logging.getLogger("uvicorn.error")
 
 
 class EntityLabel(BaseModel):
@@ -228,8 +230,14 @@ def _classify_with_gemini(section: dict, client=None) -> SectionLabel:
         config=types.GenerateContentConfig(
             system_instruction=_classification_system_prompt(),
             response_mime_type="application/json",
+            response_schema=SectionLabel,
         ),
     )
+    parsed = getattr(response, "parsed", None)
+    if isinstance(parsed, SectionLabel):
+        return parsed
+    if isinstance(parsed, dict):
+        return SectionLabel.model_validate(_normalize_label_payload(parsed))
     payload = _extract_json(getattr(response, "text", "") or "")
     return SectionLabel.model_validate(_normalize_label_payload(payload))
 
@@ -253,21 +261,45 @@ def classify_and_store(filename: str, content: str, client=None) -> dict:
         raise RuntimeError("GEMINI_API_KEY 또는 GOOGLE_API_KEY가 필요합니다.")
 
     uploaded = split_uploaded_document(filename, content)
+    LOG.info(
+        "[upload] start filename=%s doc=%s sections=%s",
+        filename,
+        uploaded.doc,
+        len(uploaded.sections),
+    )
     classified: list[dict] = []
     for section in uploaded.sections:
         try:
+            LOG.info(
+                "[upload] classify section=%s title=%s chars=%s",
+                section["id"],
+                section["title"],
+                len(section["text"]),
+            )
             label = _classify_with_timeout(section, client=client)
         except (ValidationError, json.JSONDecodeError) as exc:
+            LOG.exception("[upload] invalid Gemini response section=%s", section["id"])
             raise RuntimeError(f"Gemini 분류 응답을 해석하지 못했습니다: {exc}") from exc
+        except RuntimeError:
+            LOG.exception("[upload] classify failed section=%s", section["id"])
+            raise
         row = dict(section)
         row.update(label.model_dump())
         row["entities"] = [dict(e) for e in row["entities"] if e.get("text") and e["text"] in row["text"]]
         row["needs_review"] = row["confidence"] < 0.8 or row["security_level"] >= 3
         classified.append(row)
+        LOG.info(
+            "[upload] classified section=%s D%s confidence=%.2f entities=%s",
+            section["id"],
+            row["security_level"],
+            row["confidence"],
+            len(row["entities"]),
+        )
 
     existing = store.load_sections()
     assign_placeholders(existing + classified)
     _insert_uploaded(uploaded, classified)
+    LOG.info("[upload] stored doc=%s sections=%s", uploaded.doc, len(classified))
     return {
         "doc": uploaded.doc,
         "doc_title": uploaded.doc_title,

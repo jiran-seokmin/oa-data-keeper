@@ -100,15 +100,39 @@ function cChip(sel: boolean): CSSProperties {
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await responseErrorMessage(res));
   return res.json() as Promise<T>;
 }
-async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(await res.text());
+async function postJson<T>(url: string, body: unknown, options: { timeoutMs?: number } = {}): Promise<T> {
+  const controller = new AbortController();
+  const timeout = options.timeoutMs ? window.setTimeout(() => controller.abort(), options.timeoutMs) : null;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: controller.signal,
+    });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new Error("요청 시간이 초과되었습니다. Gemini 응답이 지연 중이면 문서를 더 작게 나눠 다시 시도해주세요.");
+    }
+    throw e;
+  } finally {
+    if (timeout !== null) window.clearTimeout(timeout);
+  }
+  if (!res.ok) throw new Error(await responseErrorMessage(res));
   return res.json() as Promise<T>;
+}
+
+async function responseErrorMessage(res: Response): Promise<string> {
+  const text = await res.text();
+  if (!text) return `${res.status} ${res.statusText}`;
+  try {
+    const data = JSON.parse(text) as { detail?: unknown };
+    if (typeof data.detail === "string") return data.detail;
+  } catch {
+    // fall through to raw text
+  }
+  return text;
 }
 
 /* ── 공통 소형 컴포넌트 ───────────────────────────────── */
@@ -330,7 +354,7 @@ export function App() {
       setUploadStatus({ stage: "reading", filename: file.name, message: "문서를 읽고 의미 단위 분리를 준비합니다." });
       const content = await file.text();
       setUploadStatus({ stage: "classifying", filename: file.name, message: "Gemini API로 섹션별 보안 등급을 분류하고 있습니다." });
-      const result = await postJson<UploadResult>("/api/documents/upload", { filename: file.name, content });
+      const result = await postJson<UploadResult>("/api/documents/upload", { filename: file.name, content }, { timeoutMs: 120_000 });
       setUploadStatus({ stage: "saving", filename: file.name, message: "분류 결과를 섹션 보안 객체로 DB에 저장했습니다.", doc: result.doc });
       const data = await getJson<{ docs: DocView[] }>(`/api/sections?persona_id=${personaId}`);
       setDocs(data.docs);

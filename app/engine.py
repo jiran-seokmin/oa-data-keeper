@@ -59,6 +59,20 @@ def base_mode_for_gap(gap: int) -> int:
     return 0
 
 
+def d4_mode_for_clearance(clearance: int, policy: dict | None = None) -> int:
+    """최고 접근 정보(D4)는 최신 발표 슬라이드의 별도 행을 따른다."""
+    configured = (policy or {}).get("d4_matrix", {}).get(f"C{clearance}")
+    if configured is not None:
+        return configured
+    if clearance >= 4:
+        return 4
+    if clearance == 3:
+        return 3
+    if clearance == 2:
+        return 1
+    return 0
+
+
 def decide(section: dict, persona: dict, policy: dict, purpose: str = "info") -> Decision:
     """섹션 하나에 대한 접근 모드 판정.
 
@@ -67,7 +81,8 @@ def decide(section: dict, persona: dict, policy: dict, purpose: str = "info") ->
     # default-deny: 등급이 없으면 최고 등급으로 간주
     d = section.get("security_level")
     if d is None:
-        d = 4
+        c = persona["clearance"]
+        return Decision(0, 0, 4, c, c - 4, ["미분류 섹션: 관리자 검수 전 접근 차단 (default-deny)"])
     c = persona["clearance"]
     gap = c - d
     reasons: list[str] = []
@@ -81,16 +96,21 @@ def decide(section: dict, persona: dict, policy: dict, purpose: str = "info") ->
     if d == 0:
         return Decision(4, 4, d, c, gap, ["D0 공개 정보"])
 
+    if d == 4:
+        mode = d4_mode_for_clearance(c, policy)
+        reasons.append(f"D4 특칙(최신 슬라이드): C{c} × D4 → {MODE_NAMES[mode]}")
+        reasons.append("최고 접근 정보는 부서/목적 보정으로 상승하지 않음")
+        return Decision(mode, mode, d, c, gap, reasons)
+
     base = base_mode_for_gap(gap)
     mode = base
     reasons.append(f"기본 매트릭스: gap={gap} → {MODE_NAMES[base]}")
 
     modifiers = policy.get("modifiers", {})
 
-    # 부서 관련성 보정: 담당 부서 데이터면 +1단계 (D4 제외, A0에서는 부활 불가)
+    # 부서 관련성 보정: 담당 부서 데이터면 +1단계 (A0에서는 부활 불가)
     if (
         modifiers.get("department_boost", {}).get("enabled")
-        and d < 4
         and base >= 1
         and persona.get("department")
         and persona["department"] in section.get("departments", [])
@@ -99,21 +119,15 @@ def decide(section: dict, persona: dict, policy: dict, purpose: str = "info") ->
             mode = min(mode + 1, 4)
             reasons.append(f"부서 관련성(+1): {persona['department']} 담당 데이터 → {MODE_NAMES[mode]}")
 
-    # 판단/집계 질의: A1/A2 판정 섹션을 A3(노출 제한)로 승격 (D4 제외)
+    # 판단/집계 질의: A1/A2 판정 섹션을 A3(노출 제한)로 승격
     if (
         purpose == "judgment"
         and modifiers.get("judgment_a3", {}).get("enabled")
-        and d < 4
         and base >= 1
         and mode < 3
     ):
         mode = 3
         reasons.append("판단/집계 질의: 추론 근거 전용(A3)으로 승격 — 내용 직접 언급 금지")
-
-    if d == 4 and mode != base:
-        # 방어적 불변식 — 위 조건들이 d<4를 요구하므로 도달하지 않아야 한다
-        mode = base
-        reasons.append("D4 불변 규칙: 컨텍스트 보정 무효화")
 
     return Decision(mode, base, d, c, gap, reasons)
 

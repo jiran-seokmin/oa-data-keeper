@@ -39,8 +39,13 @@ check("신입 × D0 → A4", decide(sec(0), JUNIOR, POLICY).mode, 4)
 check("신입 C1 × D1 (gap 0) → A4", decide(sec(1), JUNIOR, POLICY).mode, 4)
 check("신입 C1 × D2 (gap -1) → A2", decide(sec(2), JUNIOR, POLICY).mode, 2)
 check("신입 C1 × D3 (gap -2) → A1", decide(sec(3), JUNIOR, POLICY).mode, 1)
-check("신입 C1 × D4 (gap -3) → A0", decide(sec(4), JUNIOR, POLICY).mode, 0)
-check("CEO C4 × D4 (gap 0) → A4", decide(sec(4), CEO, POLICY).mode, 4)
+
+# D4 특칙: 최신 슬라이드 13의 최고 접근 정보 행(A0/A0/A1/A3/A4)
+check("외부 C0 × D4 → A0", decide(sec(4), EXTERNAL, POLICY).mode, 0)
+check("신입 C1 × D4 → A0", decide(sec(4), JUNIOR, POLICY).mode, 0)
+check("영업팀원 C2 × D4 → A1", decide(sec(4), SALES_REP, POLICY).mode, 1)
+check("영업팀장 C3 × D4 → A3", decide(sec(4), SALES_LEAD, POLICY).mode, 3)
+check("CEO C4 × D4 → A4", decide(sec(4), CEO, POLICY).mode, 4)
 
 # 부서 관련성 보정 (+1)
 check("영업팀원 C2 × D3 영업 데이터 (gap -1, 부서 일치) → A3",
@@ -50,9 +55,9 @@ check("영업팀원 C2 × D3 타부서 데이터 (gap -1) → A2",
 check("영업팀장 C3 × D3 영업 데이터 (gap 0) → A4",
       decide(sec(3, ["영업팀"]), SALES_LEAD, POLICY).mode, 4)
 
-# D4 불변 규칙: 부서가 일치해도 상승 없음
-check("영업팀장 C3 × D4 영업 데이터 (gap -1) → A2 (보정 없음)",
-      decide(sec(4, ["영업팀"]), SALES_LEAD, POLICY).mode, 2)
+# D4 불변 규칙: 부서가 일치해도 최신 슬라이드 D4 행에서 상승 없음
+check("영업팀장 C3 × D4 영업 데이터 → A3 (부서 보정 없음)",
+      decide(sec(4, ["영업팀"]), SALES_LEAD, POLICY).mode, 3)
 
 # 판단/집계 질의 → A3 승격
 check("신입 C1 × D3 판단 질의 (gap -2) → A3", decide(sec(3), JUNIOR, POLICY, "judgment").mode, 3)
@@ -60,8 +65,9 @@ check("신입 C1 × D2 판단 질의 (gap -1) → A3", decide(sec(2), JUNIOR, PO
 check("신입 C1 × D4 판단 질의 (gap -3) → A0 (승격 불가)", decide(sec(4), JUNIOR, POLICY, "judgment").mode, 0)
 check("CEO C4 × D3 판단 질의 → A4 (하향 없음)", decide(sec(3), CEO, POLICY, "judgment").mode, 4)
 
-# default-deny: 등급 없는 섹션은 D4 취급
+# default-deny: 등급 없는 섹션은 관리자 검수 전 접근 차단
 check("신입 × 미분류 섹션 → A0", decide({"departments": []}, JUNIOR, POLICY).mode, 0)
+check("CEO × 미분류 섹션 → A0", decide({"departments": []}, CEO, POLICY).mode, 0)
 
 # 마스킹: 긴 엔티티 우선 치환
 masked = mask_text(

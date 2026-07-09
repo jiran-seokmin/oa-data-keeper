@@ -1,0 +1,18 @@
+# 관리자 등록 키워드 → 보안 등급 힌트
+# 수집 파이프라인(라이브 분류)에서 분류기 프롬프트에 주입된다.
+# 거버넌스 루프: 오분류 발견 시 관리자가 이 목록을 갱신해 분류를 고도화한다.
+hints:
+  - { keyword: "보도자료", level: 0 }
+  - { keyword: "공개 자료", level: 0 }
+  - { keyword: "사내 공지", level: 1 }
+  - { keyword: "회의록", level: 1 }
+  - { keyword: "파이프라인", level: 2 }
+  - { keyword: "미팅 노트", level: 2 }
+  - { keyword: "고객사 목록", level: 2 }
+  - { keyword: "계약 조건", level: 3 }
+  - { keyword: "매출", level: 3 }
+  - { keyword: "협상", level: 3 }
+  - { keyword: "인사", level: 4 }
+  - { keyword: "밸류에이션", level: 4 }
+  - { keyword: "런웨이", level: 4 }
+  - { keyword: "인수", level: 4 }

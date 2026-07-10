@@ -1,6 +1,6 @@
 # PRD — DataKeeper 접근제어 챗 서비스 (Phase 2 확장)
 
-> 상태: Draft · 작성일 2026-07-09 · 작성 이석민
+> 상태: Implemented with remaining gaps · 작성일 2026-07-09 · 현행화 2026-07-10 · 작성 이석민
 > 상위 기준 문서: 발표 슬라이드(최우선) → `docs/CONCEPT.md` → 본 PRD
 > 본 PRD는 CONCEPT.md의 **Phase 2 (실시간 AI 질의응답)** 를 실제 웹 서비스로 구체화한 것이다. CONCEPT.md와 충돌하면 CONCEPT.md의 원칙(특히 §4.2, §5, §8)을 우선한다.
 
@@ -9,9 +9,10 @@
 ## 1. 배경 및 목표 전환
 
 ### 1.1 현재 상태 (As-Is)
-- MVP는 **분류 + 판정 + 시각화**에 초점. 산출물은 `data/sections.json`(고정·커밋)을 Streamlit 뷰어로 페르소나별 렌더링하는 것.
-- 판정 엔진(`app/engine.py`)과 질의 파이프라인(`app/pipeline.py`, 출력 가드 포함)은 이미 구현되어 있고, Streamlit에 챗 탭이 보너스로 존재한다.
-- 데이터는 전부 JSON 파일. `data/samples/`(신규 기밀 원문 4종)는 **아직 등급 분류·저장되지 않은 원문 상태**다.
+- 정적 샘플 4종은 `app/seed_db.py`의 검토된 `GRADES`와 병합되어 SQLite에 63개 의미 단위 섹션으로 시딩된다.
+- 결정론적 판정, 접근 필터 우선 키워드 검색, FastAPI, React 뷰어·매트릭스·챗이 구현되어 있다.
+- Phase 2 LLM 답변과 출력 가드도 구현되어 있으며, 실패 시 FE가 무-LLM 검색으로 폴백한다.
+- Streamlit `app/ui.py`는 레거시 데모이고 현행 기본 UI는 `app/web`의 React SPA다.
 
 ### 1.2 목표 (To-Be) — "접근제어 RAG"
 `data/samples/`의 문서를 **등급 정책에 맞춰 DB에 저장**하고, **웹에서 특정 접근 등급(C)을 가진 사용자가 질문하면 그 등급으로 볼 수 있게 가공된 데이터만 근거로 답하는 챗 서비스**로 전환한다.
@@ -43,7 +44,7 @@
 ### 2.1 In Scope — P0 (무-LLM, 데모 반드시 동작)
 - **`data/samples/*.md`(4종)만** 대상: 섹션 분리 → D등급·엔티티·A2 요약 부여 → **SQLite에 직접 시딩** (`app/seed_db.py` 실행 시 파싱+등급 병합+INSERT가 한 번에). 등급은 Claude 개발단계 분석을 사람이 검토해 코드에 커밋, 런타임 분류 없음. (구 `data/seed/`·`data/labels.json`·`data/sections.json` 레거시 파이프라인은 2026-07-09 정리로 삭제됨.)
 - **접근제어 키워드 검색·조회**: 질문 → 접근 가능 섹션 필터(A4 제외) → 등급별 렌더 → 결과 반환
-- **FastAPI 백엔드** + **경량 프론트(HTML/JS)**: 페르소나 선택 + 검색/조회 챗 UI + 판정 근거 표시
+- **FastAPI 백엔드** + **React 19/TypeScript/Vite 프론트**: 페르소나 선택 + 판정 그리드·뷰어·매트릭스·챗 UI
 - 접근 판정은 기존 `engine.py` 재사용, 저장은 SQLite
 - 데모 재현성: DB는 커밋되거나 재생성 스크립트로 결정론적 복원 가능
 
@@ -51,10 +52,11 @@
 - 1단계에서 조회된 **접근제어된 컨텍스트 + 사용자 질문 → LLM 답변 생성** (기존 `pipeline.py` 재사용)
 - **출력 가드**(제한 엔티티 유출 스캔·재생성·차단)
 - 답변 하단에 판정 근거 패널 + 출력가드 상태
-- `ANTHROPIC_API_KEY` 있을 때 켜지는 상위 기능. 키가 없으면 FE는 자동으로 P0(조회) 모드로 폴백.
+- 기본 Gemini(`GEMINI_API_KEY` 또는 `GOOGLE_API_KEY`), 선택 Anthropic(`ANTHROPIC_API_KEY`) provider를 지원한다. 키가 없거나 호출이 실패하면 FE는 P0 조회 모드로 폴백한다.
 
-### 2.3 In Scope — P2 (시간 남으면)
-- 문서 뷰어(등급별 섹션 렌더) 웹 이식 / 판정 매트릭스 뷰 / 감사 로그
+### 2.3 In Scope — P2
+- 문서 뷰어와 판정 매트릭스는 구현됐다.
+- 감사 로그는 아직 미구현이다.
 
 ### 2.4 Out of Scope
 - 계정 로그인/비밀번호 인증 → **페르소나 선택으로 대체** (드롭다운 전환)
@@ -130,14 +132,16 @@ data/samples/*.md (4종)          app/seed_db.py 내 등급 시드(GRADES, 커�
   app/server.py  (FastAPI)
    GET  /api/personas
    GET  /api/documents?persona_id=
+   GET  /api/sections?persona_id=                             ← React 그리드·뷰어
+   GET  /api/matrix                                           ← 판정 매트릭스
    POST /api/search          {persona_id, question, purpose}   ← P0 핵심 (무-LLM)
    POST /api/chat            {persona_id, question, purpose}   ← P1 (LLM 답변)
-   GET  /api/documents/{doc}?persona_id=&purpose=   (P2 뷰어)
-   GET  /api/matrix / /api/audit                    (P2)
+   POST /api/documents/upload                                 ← Gemini 문서 분류
+   DELETE /api/documents/{doc}
       │
       ▼
-  app/web/  (정적 프론트: index.html + app.js + style.css)
-   페르소나 선택 · 검색/챗 · 판정 근거 패널 · (P2) 뷰어/매트릭스
+  app/web/  (React 19 + TypeScript + Vite SPA)
+   페르소나 선택 · 판정 그리드 · 뷰어 · 매트릭스 · 검색/챗
 ```
 
 **설계 원칙 재확인 (불변):**
@@ -216,16 +220,20 @@ CREATE TABLE personas (
 
 ---
 
-## 8. API 명세 (초안)
+## 8. API 명세 (현행 구현)
 
 | Method | Path | 입력 | 출력 | 비고 |
 |---|---|---|---|---|
 | GET | `/api/personas` | — | `[{id,name,clearance,department,channel}]` | 프론트 셀렉터 |
 | GET | `/api/documents` | `persona_id` | `[{doc,doc_title,lock_state}]` | lock_state: open/partial/locked |
+| GET | `/api/sections` | `persona_id` | `{persona, docs[]}` | React 판정 그리드·문서 뷰어 |
+| GET | `/api/matrix` | — | `{personas, rows}` | 전 섹션 × 전 페르소나 판정 |
 | POST | `/api/search` | `{persona_id, question, purpose}` | `{results[], persona}` | **P0 핵심 (무-LLM)** |
 | POST | `/api/chat` | `{persona_id, question, purpose}` | `{answer, used_sections[], guard, persona}` | **P1 (LLM 답변)** |
-| GET | `/api/documents/{doc}` | `persona_id, purpose` | `[{section, decision}]` | P2 뷰어 |
-| GET | `/api/matrix` / `/api/audit` | — | 격자 / 로그 | P2 |
+| POST | `/api/documents/upload` | `{filename, content}` | 분류·저장 결과 | `.txt`/`.md`, Gemini 전용 |
+| DELETE | `/api/documents/{doc}` | — | 삭제 문서 정보 | 관련 섹션·엔티티 함께 삭제 |
+
+`/api/audit`은 아직 구현되지 않았다.
 
 **`POST /api/search` 응답 (P0)**
 ```json
@@ -250,22 +258,24 @@ CREATE TABLE personas (
   "persona": {"id":"sales_rep","name":"영업팀원","clearance":2}
 }
 ```
-- `ANTHROPIC_API_KEY` 없으면 503 → FE는 자동으로 `/api/search`(조회 모드)로 폴백.
+- 선택한 provider의 API 키가 없거나 LLM 호출이 실패하면 503 → FE는 자동으로 `/api/search`(조회 모드)로 폴백.
 - `used_sections`/`reasons`는 판정 투명성을 위해 항상 반환.
 
 ---
 
-## 9. 프론트엔드 요구사항 (경량 HTML/JS)
+## 9. 프론트엔드 요구사항 (React/TypeScript/Vite)
 
-- **상단 바**: 페르소나 셀렉터(드롭다운) + "판단/집계 목적(A1 완화)" 토글. 전환 즉시 세션 컨텍스트 갱신.
+> 구현 기준: `app/web/src/App.tsx`, `app/web/src/styles.css`. 아래에서 `[미구현]`으로 표시한 항목은 잔여 요구사항이다.
+
+- **상단 바**: 페르소나 칩 전환은 구현됨. **[미구현]** "판단/집계 목적(A1 완화)" 토글과 `purpose` 연결.
 - **챗 화면**:
   - 질문 입력 → 사용자 메시지 버블.
-  - 응답 버블: **P1 모드**면 LLM 답변, **P0/폴백**이면 조회된 섹션 카드 리스트(A모드별 렌더 — 원문/요약카드/마스킹 하이라이트/배경전용 배지).
-  - 응답 하단에 접이식 **"판정 근거"** 패널(used_sections: D등급 배지·A모드·gap·사유). 출력 가드 발동 시 경고 배지.
+  - 응답 버블: P1 LLM 답변과 P0 폴백 안내가 구현됨. **[미구현]** P0 결과의 섹션 카드 렌더.
+  - 출처의 D등급·A모드와 출력 가드 경고는 구현됨. **[미구현]** gap·전체 사유를 보여주는 접이식 판정 근거 패널.
   - API 미설정 시 "조회 모드로 동작 중" 안내.
-- **(P2) 문서 뷰어 탭**: 현재 Streamlit `render_section` 규칙을 웹으로 이식.
-- **(P2) 매트릭스 탭**: 섹션×페르소나 히트맵.
-- 스타일: 기존 UI의 모드 색상(A0 초록 … A4 회색) 팔레트 재사용. 프레임워크 없이 vanilla JS + fetch.
+- **문서 뷰어 탭**: React로 구현됨.
+- **매트릭스 탭**: 섹션×페르소나 히트맵 구현됨.
+- 스타일: A0~A4 팔레트를 React 컴포넌트와 CSS에서 사용한다.
 
 ---
 
@@ -324,7 +334,7 @@ CREATE TABLE personas (
 | M3 API | FastAPI 검색/페르소나/문서 엔드포인트 | `app/server.py` (`/api/search`) |
 | M4 프론트 (P0) | 페르소나 셀렉터 + 검색 챗 UI + 판정 근거 | `app/web/` |
 | M5 LLM 답변 (P1) | pipeline DB 연결 + `/api/chat` + FE 답변/폴백 | LLM 답변 레이어 |
-| M6 (P2) | 뷰어·매트릭스·감사 로그 이식 | 추가 API/화면 |
+| M6 (P2) | 뷰어·매트릭스 구현 완료, 감사 로그 미구현 | `/api/sections`, `/api/matrix`, React 화면 |
 | M7 리허설 | 페르소나×대표질의 전수 확인 | 데모 대본 |
 
 세부 작업은 `docs/TASKS-chat-service.md` 참조.

@@ -1,26 +1,37 @@
-#!/usr/bin/env python3
+"""C/S/O upload classification, review state and Skill injection tests."""
+
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import store, upload_pipeline
-from app.seed_db import seed
+from app.config import classification_model, has_gemini_credentials
+from app.db import get_conn
 
 
-def _label(section_id: str | None = None, entities=None, level: int = 3) -> dict:
+def _label(
+    section_id: str | None = None,
+    *,
+    grade: str = "S",
+    confidence: float = 0.91,
+    applied_skills: list[str] | None = None,
+) -> dict:
     payload = {
-        "security_level": level,
-        "confidence": 0.91,
+        "grade": grade,
+        "confidence": confidence,
         "keywords": ["계약 금액", "고객사"],
         "departments": ["영업팀"],
-        "summary_generalized": "고객 계약 조건과 금액 정보가 포함된 기밀 문단.",
-        "entities": entities if entities is not None
-        else [{"text": "한빛전자", "type": "고객사"}, {"text": "12억", "type": "금액"}],
+        "summary": "고객 계약 조건과 금액 정보가 포함된 내부 문단.",
+        "classification_reason": "가격과 계약 조건이 포함되어 민감 등급으로 분류",
+        "applied_skills": applied_skills or [],
     }
     if section_id is not None:
         payload["id"] = section_id
@@ -34,34 +45,53 @@ class FakeResponse:
 
 
 class FakeModels:
-    """배치 프롬프트(<section id=...>)면 배열을, 문단별 프롬프트면 단일 객체를 반환."""
-
-    def __init__(self, entities=None, drop_ids: set[str] | None = None):
-        self.calls = []
-        self.entities = entities
+    def __init__(
+        self,
+        *,
+        drop_ids: set[str] | None = None,
+        grade: str = "S",
+        confidence: float = 0.91,
+        applied_skills: list[str] | None = None,
+    ):
+        self.calls: list[dict] = []
         self.drop_ids = drop_ids or set()
+        self.grade = grade
+        self.confidence = confidence
+        self.applied_skills = applied_skills or []
 
     def generate_content(self, **kwargs):
         self.calls.append(kwargs)
-        prompt = kwargs["contents"]
-        ids = re.findall(r'<section id="([^"]+)"', prompt)
-        if ids:  # 배치 호출
-            return FakeResponse([
-                _label(i, entities=self.entities) for i in ids if i not in self.drop_ids
-            ])
-        return FakeResponse(_label(entities=self.entities))
+        ids = re.findall(r'<section id="([^"]+)"', kwargs["contents"])
+        if ids:
+            return FakeResponse(
+                [
+                    _label(
+                        section_id,
+                        grade=self.grade,
+                        confidence=self.confidence,
+                        applied_skills=self.applied_skills,
+                    )
+                    for section_id in ids
+                    if section_id not in self.drop_ids
+                ]
+            )
+        return FakeResponse(
+            _label(
+                grade=self.grade,
+                confidence=self.confidence,
+                applied_skills=self.applied_skills,
+            )
+        )
 
 
 class FakeGemini:
-    def __init__(self, entities=None, drop_ids: set[str] | None = None):
-        self.models = FakeModels(entities=entities, drop_ids=drop_ids)
+    def __init__(self, **kwargs):
+        self.models = FakeModels(**kwargs)
 
 
 def check(label: str, condition: bool) -> None:
-    if not condition:
-        print(f"[FAIL] {label}")
-        raise SystemExit(1)
-    print(f"[OK ] {label}")
+    print(f"[{'OK ' if condition else 'FAIL'}] {label}")
+    assert condition, label
 
 
 CONTRACT_DOC = (
@@ -72,38 +102,114 @@ CONTRACT_DOC = (
 
 
 def main() -> None:
-    # ── 배치 1회 호출: 문단 2개 문서가 Gemini 호출 1번으로 분류·저장 ──
-    seed()
-    fake = FakeGemini()
-    result = upload_pipeline.classify_and_store("uploaded_contract.md", CONTRACT_DOC, client=fake)
-    sections = store.sections_for_doc(result["doc"])
+    with patch.dict(
+        os.environ,
+        {
+            "ACE_PROVIDER": "anthropic",
+            "ACE_MODEL": "claude-opus-4-8",
+            "GEMINI_API_KEY": "test-key",
+        },
+        clear=True,
+    ):
+        check("챗이 Anthropic이어도 업로드는 Gemini 모델 사용", (
+            has_gemini_credentials() and classification_model() == "gemini-2.5-flash"
+        ))
 
-    check("문서 전체가 Gemini 1회 호출로 분류됨", len(fake.models.calls) == 1)
-    check("업로드 문서가 DB에 저장됨", result["doc"] == "uploaded_contract" and len(sections) == 2)
-    check("분류 등급이 섹션에 저장됨", all(s["security_level"] == 3 for s in sections))
-    check("엔티티 플레이스홀더가 저장됨", {e["text"] for e in sections[0]["entities"]} == {"한빛전자", "12억"})
-    check("검수 대상 플래그가 저장됨", sections[0]["needs_review"] is True)
+    with TemporaryDirectory() as directory:
+        db_path = Path(directory) / "upload-test.db"
 
-    # ── 폴백: 배치 응답에서 누락된 섹션만 문단별 호출로 재분류 ──
-    seed()
-    partial = FakeGemini(drop_ids={"uploaded_contract#1"})
-    partial_result = upload_pipeline.classify_and_store("uploaded_contract.md", CONTRACT_DOC, client=partial)
-    partial_sections = store.sections_for_doc(partial_result["doc"])
-    check("배치 누락 시 해당 섹션만 폴백 호출 (총 2회)", len(partial.models.calls) == 2)
-    check("폴백 포함 전체 섹션이 저장됨", len(partial_sections) == 2)
-    check("폴백 섹션도 등급이 저장됨", partial_sections[1]["security_level"] == 3)
+        fake = FakeGemini()
+        result = upload_pipeline.classify_and_store(
+            "uploaded_contract.md",
+            CONTRACT_DOC,
+            client=fake,
+            db_path=db_path,
+        )
+        conn = get_conn(db_path)
+        try:
+            sections = store.sections_for_doc(result["doc"], conn)
+            logs = store.load_classification_logs(conn, doc=result["doc"])
+        finally:
+            conn.close()
+        check("문서 전체를 Gemini 1회로 분류", len(fake.models.calls) == 1)
+        check("업로드 문서와 섹션 저장", result["doc"] == "uploaded_contract" and len(sections) == 2)
+        check("S 등급 자동 확정", all(
+            section["grade"] == "S" and section["classification_status"] == "auto_confirmed"
+            for section in sections
+        ))
+        check("문서 등급은 섹션 Max", result["document_grade"] == "S")
+        check("섹션별 자동 분류 이력", len(logs) == 2 and all(
+            log["action"] == "auto_classified" for log in logs
+        ))
 
-    # ── 문자열 엔티티 응답 정규화 (배치 경로) ──
-    seed()
-    string_entity_fake = FakeGemini(entities=["DataKeeper", "2027년", "35퍼센트"])
-    string_result = upload_pipeline.classify_and_store(
-        "uploaded_strategy.md",
-        "# 업로드 전략 메모\n\n## 성장 계획\nDataKeeper는 2027년까지 전환율을 35퍼센트로 높이는 계획을 검토합니다.",
-        client=string_entity_fake,
-    )
-    string_sections = store.sections_for_doc(string_result["doc"])
-    check("문자열 엔티티 응답도 정규화됨", {e["text"] for e in string_sections[0]["entities"]} == {"DataKeeper", "2027년", "35퍼센트"})
-    check("문자열 엔티티에 타입이 부여됨", all(e["type"] for e in string_sections[0]["entities"]))
+        partial = FakeGemini(drop_ids={"fallback_contract#1"})
+        partial_result = upload_pipeline.classify_and_store(
+            "fallback_contract.md",
+            CONTRACT_DOC,
+            client=partial,
+            db_path=db_path,
+        )
+        check("배치 누락 섹션만 개별 폴백", len(partial.models.calls) == 2)
+        conn = get_conn(db_path)
+        try:
+            check("폴백 포함 모든 섹션 저장", len(
+                store.sections_for_doc(partial_result["doc"], conn)
+            ) == 2)
+        finally:
+            conn.close()
+
+        low_confidence = FakeGemini(grade="C", confidence=0.55)
+        pending_result = upload_pipeline.classify_and_store(
+            "pending_contract.md",
+            CONTRACT_DOC,
+            client=low_confidence,
+            db_path=db_path,
+        )
+        conn = get_conn(db_path)
+        try:
+            pending_sections = store.sections_for_doc(pending_result["doc"], conn)
+        finally:
+            conn.close()
+        check("신뢰도 0.8 미만은 검수 대기", pending_result["pending_review"] == 2 and all(
+            section["classification_status"] == "pending_review"
+            for section in pending_sections
+        ))
+
+        conn = get_conn(db_path)
+        try:
+            skill = store.create_skill(
+                "대형 계약",
+                "대형 계약 금액과 비공개 할인 조건은 C로 분류하세요.",
+                grade="C",
+                keywords=["계약 금액", "할인 조건"],
+                actor="reviewer",
+                conn=conn,
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        skill_fake = FakeGemini(grade="C", applied_skills=[skill["name"]])
+        skill_result = upload_pipeline.classify_and_store(
+            "skill_contract.md",
+            CONTRACT_DOC,
+            client=skill_fake,
+            db_path=db_path,
+        )
+        first_system_prompt = str(skill_fake.models.calls[0]["config"].system_instruction)
+        conn = get_conn(db_path)
+        try:
+            skill_logs = [
+                log
+                for log in store.load_classification_logs(conn, doc=skill_result["doc"])
+                if log["action"] == "skill_applied"
+            ]
+        finally:
+            conn.close()
+        check("활성 Skill을 다음 분류 프롬프트에 주입", "대형 계약" in first_system_prompt)
+        check("실제 적용된 Skill만 이력 기록", len(skill_logs) == 2 and all(
+            log["skill_id"] == skill["id"] for log in skill_logs
+        ))
 
     print("\n업로드 파이프라인 테스트 통과 ✅")
 

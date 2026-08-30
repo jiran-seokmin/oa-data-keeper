@@ -1,36 +1,34 @@
-# 접근 제어 엔진 정책
-# 판정은 이 파일 + engine.py의 결정론적 코드로만 이루어진다 (LLM 미사용).
+# DataKeeper CSO 분류·접근 정책
+#
+# 등급 순서와 레거시 변환은 app.engine의 결정론적 코드와 동일해야 한다.
 
-# 기본 매트릭스: gap = 사용자 접근 등급(C) - 데이터 보안 등급(D)
-# 최신 발표 슬라이드 기준: A0 전체 접근, A1 노출 제한, A2 의미 제한, A3 정보 마스킹, A4 접근 차단.
-# D4는 최신 발표 슬라이드의 별도 행(A4/A4/A3/A1/A0)을 따른다.
-matrix:
-  ">=0": 0   # A0 전체 접근
-  "-1": 2    # A2 의미 제한
-  "-2": 3    # A3 정보 마스킹
-  "<=-3": 4  # A4 접근 차단
+grades:
+  O:
+    rank: 0
+    name: Open
+    label: 공개
+  S:
+    rank: 1
+    name: Sensitive
+    label: 민감
+  C:
+    rank: 2
+    name: Classified
+    label: 기밀
 
-d4_matrix:
-  C0: 4  # A4 접근 차단
-  C1: 4  # A4 접근 차단
-  C2: 3  # A3 정보 마스킹
-  C3: 1  # A1 노출 제한
-  C4: 0  # A0 전체 접근
+legacy_mapping:
+  D0: O
+  D1: S
+  D2: S
+  D3: S
+  D4: C
 
-# 컨텍스트 보정 규칙
-modifiers:
-  # 담당 부서의 데이터면 접근 모드를 1단계 완화 (D4는 어떤 보정으로도 상승 불가)
-  department_boost:
-    enabled: true
-  # 판단/집계 목적 질의면 A2/A3 판정 섹션을 A1(노출 제한)로 완화
-  # → AI가 추론 근거로는 사용하되 내용을 직접 언급하지 않음
-  judgment_a1:
-    enabled: true
+classification:
+  confidence_threshold: 0.8
+  uncertain_status: pending_review
 
-# 외부 채널(외부용 봇, 미인증 세션) 하드 캡: D0만 A0, 나머지 전부 A4
-external_channel:
-  public_only: true
-
-# 불변 규칙 (코드에 하드코딩, 여기서 끌 수 없음):
-# - D4는 컨텍스트 보정으로 상승하지 않는다
-# - 보안 등급이 없는 섹션은 관리자 검수 전 접근 차단한다 (default-deny)
+access:
+  confirmed_only: true
+  default_deny: true
+  # 사용자 등급 이상의 섹션은 조회·검색·LLM 컨텍스트에 진입하지 않는다.
+  allow_when_user_rank_gte_section_rank: true

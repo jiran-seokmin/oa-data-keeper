@@ -1,114 +1,85 @@
-"""접근제어 검색 유출·판정 테스트. 실행: python tests/test_retrieval.py (API 불필요)
+"""CSO 권한 우선 검색 테스트."""
 
-자체 완결: 임시 DB에 samples를 시딩한 뒤 store/retrieval을 검증한다.
-"""
-
-import os
 import sys
-import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import retrieval, store
-from app.engine import load_yaml
-from app.seed_db import seed
-
-POLICY = load_yaml("app/policy.yaml")
-
-EXTERNAL = {"name": "외부 고객", "clearance": 0, "department": None, "channel": "external"}
-JUNIOR = {"name": "신입 개발자", "clearance": 1, "department": "개발팀", "channel": "internal"}
-SALES_REP = {"name": "영업팀원", "clearance": 2, "department": "영업팀", "channel": "internal"}
-SALES_LEAD = {"name": "영업팀장", "clearance": 3, "department": "영업팀", "channel": "internal"}
-CEO = {"name": "CEO", "clearance": 4, "department": "경영진", "channel": "internal"}
-ALL = [EXTERNAL, JUNIOR, SALES_REP, SALES_LEAD, CEO]
-
-MNA = "ai_sales_strategy_report#12"  # 비공개 인수 검토 첫 문단 (D4)
-
-_fails = 0
+from app import retrieval
 
 
-def check(name, cond):
-    global _fails
-    print(f"[{'OK ' if cond else 'FAIL'}] {name}")
-    if not cond:
-        _fails += 1
+def section(index: int, grade: str | None, text: str, status: str = "auto_confirmed") -> dict:
+    return {
+        "id": f"demo#{index}",
+        "doc": "demo",
+        "doc_title": "데모 문서",
+        "title": f"섹션 {index}",
+        "text": text,
+        "grade": grade,
+        "confidence": 0.95,
+        "classification_status": status,
+        "classification_reason": "테스트",
+        "keywords": text.split(),
+        "departments": [],
+        "summary": f"{grade or '미분류'} 요약",
+        "confirmed_by": None,
+        "confirmed_at": None,
+    }
 
 
-def find(results, sid):
-    return next((r for r in results if r["id"] == sid), None)
+SECTIONS = [
+    section(0, "O", "공개 제품 소개"),
+    section(1, "S", "내부 영업 파이프라인"),
+    section(2, "C", "비공개 인수 검토 오로라"),
+    section(3, "S", "미확정 보상 계획", "pending_review"),
+]
+O_USER = {"name": "외부", "access_grade": "O"}
+S_USER = {"name": "내부", "access_grade": "S"}
+C_USER = {"name": "기밀", "access_grade": "C"}
 
 
-def run(conn):
-    def q(text, persona, purpose="info"):
-        return retrieval.search(text, persona, POLICY, purpose, conn)
-
-    # ── 시딩 결과 ──
-    secs = store.load_sections(conn)
-    check("시딩: 의미 단위 섹션 63개", len(secs) == 63)
-
-    # ── 유출 방지 ──
-    check("C0 외부 'M&A 원문 엔티티' 검색 → 0건 (존재 은닉)",
-          len(q("실드락 인수 프로젝트 오로라", EXTERNAL)) == 0)
-    check("C2 마스킹된 원문 엔티티('실드락')로 검색 → 0건",
-          len(q("실드락", SALES_REP)) == 0)
-
-    # ── D4 인수검토: 등급별 렌더 ──
-    c1 = q("인수 검토", JUNIOR)
-    check("C1 신입: D4 인수검토는 결과에 없음 (A4 존재 은닉)", find(c1, MNA) is None)
-
-    c2 = find(q("인수 검토", SALES_REP), MNA)
-    check("C2 영업원: 인수검토 A3 마스킹으로 노출", c2 and c2["mode"] == 3)
-    check("C2 마스킹본에 원문 '실드락' 없음", c2 and "실드락" not in c2["rendered"])
-    check("C2 마스킹본에 플레이스홀더 '[기업명A]' 포함", c2 and "[기업명A]" in c2["rendered"])
-
-    c3 = find(q("인수 검토", SALES_LEAD), MNA)
-    check("C3 팀장: 인수검토 A1 노출제한", c3 and c3["mode"] == 1)
-    check("C3 A1은 본문 미공개(content_hidden)", c3 and c3["content_hidden"] is True)
-    check("C3 A1 rendered에 원문 '실드락' 없음", c3 and "실드락" not in c3["rendered"])
-
-    c4 = find(q("인수 검토", CEO), MNA)
-    check("C4 CEO: 인수검토 A0 원문", c4 and c4["mode"] == 0)
-    check("C4 원문에 '실드락' 포함", c4 and "실드락" in c4["rendered"])
-
-    # ── 불변식: 어떤 페르소나·질의에도 A4 섹션은 결과에 없음 ──
-    broad = "고객 계약 인수 보상 평가 점검 매출 가격 재무 검토 현황"
-    no_a4 = all(r["mode"] != 4 for p in ALL for r in q(broad, p))
-    check("불변식: A4 섹션은 결과에 절대 미포함", no_a4)
-
-    # ── 불변식: A3 마스킹 결과엔 해당 섹션 원문 엔티티가 남지 않음 ──
-    leak = False
-    for p in ALL:
-        for r in q(broad, p):
-            if r["mode"] == 3:
-                s = next(x for x in secs if x["id"] == r["id"])
-                if any(e["text"] in r["rendered"] for e in s["entities"]):
-                    leak = True
-    check("불변식: A3 마스킹본에 원문 엔티티 잔존 없음", not leak)
-
-    # ── 대표 시나리오: '논의 중인 고객사' 등급별 결과 ──
-    # C0 외부는 D0 공개 섹션만 볼 수 있다 (개요에 '고객사명'이 있어 히트할 수 있으나 전부 D0).
-    ext_res = q("논의 중인 고객사", EXTERNAL)
-    check("C0 외부 결과는 전부 D0 공개", all(r["security_level"] == 0 for r in ext_res))
-    check("C0 외부: 기밀 파이프라인(D2)은 미노출",
-          find(ext_res, "ai_sales_strategy_report#3") is None)
-    rep = find(q("논의 중인 고객사", SALES_REP), "ai_sales_strategy_report#3")
-    check("C2 영업원 파이프라인 A0 원문 노출", rep and rep["mode"] == 0)
-    jun = find(q("논의 중인 고객사", JUNIOR), "ai_sales_strategy_report#3")
-    check("C1 신입 파이프라인 A2 요약으로 대체", jun and jun["mode"] == 2)
+def check(label: str, condition: bool) -> None:
+    print(f"[{'OK ' if condition else 'FAIL'}] {label}")
+    assert condition, label
 
 
-def main():
-    tmp = tempfile.mktemp(suffix=".db")
-    seed(tmp)
-    conn = store.get_conn(tmp)
-    try:
-        run(conn)
-    finally:
-        conn.close()
-        os.remove(tmp)
-    print(f"\n{'모든 테스트 통과 ✅' if _fails == 0 else f'{_fails}개 실패 ❌'}")
-    sys.exit(1 if _fails else 0)
+def main() -> None:
+    check("O 사용자는 공개 섹션 검색", len(
+        retrieval.search_sections("제품 소개", O_USER, SECTIONS)
+    ) == 1)
+    check("O 사용자는 S 섹션 원문 키워드로도 검색 불가", not retrieval.search_sections(
+        "영업 파이프라인", O_USER, SECTIONS
+    ))
+    check("S 사용자는 S 섹션 검색", len(
+        retrieval.search_sections("영업 파이프라인", S_USER, SECTIONS)
+    ) == 1)
+    check("S 사용자는 C 섹션 존재·원문 모두 은닉", not retrieval.search_sections(
+        "인수 오로라", S_USER, SECTIONS
+    ))
+    check("C 사용자는 C 섹션 검색", len(
+        retrieval.search_sections("인수 오로라", C_USER, SECTIONS)
+    ) == 1)
+    check("검수 대기 섹션은 C 사용자도 검색 불가", not retrieval.search_sections(
+        "미확정 보상", C_USER, SECTIONS
+    ))
+    follow_up = retrieval.search_sections_with_context(
+        "그 내용은?", ["내부 영업 파이프라인을 알려주세요."], S_USER, SECTIONS
+    )
+    check("후속 질문은 같은 세션의 이전 질문으로 검색 보완", [
+        item["id"] for item in follow_up
+    ] == ["demo#1"])
+    check("후속 질문 문맥도 사용자 등급을 넘지 못함", not retrieval.search_sections_with_context(
+        "그 내용은?", ["내부 영업 파이프라인을 알려주세요."], O_USER, SECTIONS
+    ))
+    current_match = retrieval.search_sections_with_context(
+        "제품 소개", ["내부 영업 파이프라인을 알려주세요."], S_USER, SECTIONS
+    )
+    check("현재 질문이 검색되면 이전 질문을 섞지 않음", [
+        item["id"] for item in current_match
+    ] == ["demo#0"])
+    check("접근 수 집계", retrieval.access_counts(S_USER, SECTIONS) == (2, 2))
+
+    print("\nCSO 검색 테스트 통과 ✅")
 
 
 if __name__ == "__main__":

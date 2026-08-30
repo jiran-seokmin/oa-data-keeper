@@ -1,50 +1,64 @@
-"""FastAPI 백엔드 — 접근제어 키워드 검색 챗 서비스.
+"""FastAPI backend for the DataKeeper C/S/O MVP.
 
-  uvicorn app.server:app --reload --port 8000
-
-엔드포인트:
-  GET  /api/personas               페르소나 목록
-  GET  /api/documents?persona_id=  문서 목록 + 페르소나별 lock 상태
-  POST /api/search                 접근제어 키워드 검색 (무-LLM, P0 핵심)
-  POST /api/documents/upload       업로드 문서 Gemini 보안 등급 분류 + DB 추가
-  DELETE /api/documents/{doc}       문서와 섹션 등급 메타데이터 삭제
-  POST /api/chat                   Phase E LLM 답변 + 출력 가드 (키 없으면 503)
-
-접근 판정은 항상 engine.decide()를 경유한다 (판정에 LLM 미사용).
+Classification list APIs expose review metadata, while the on-demand preview
+endpoint returns source content for one explicitly selected review section.
+User-facing search and chat read only confirmed sections permitted by the
+caller's access grade. Audit records contain identifiers and decisions, never
+questions, answers or source content.
 """
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Annotated, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from app import pipeline, retrieval, store, upload_pipeline, views
+from app import governance, pipeline, retrieval, store, upload_pipeline, views
 from app.config import has_llm_credentials, llm_provider, load_dotenv
-from app.engine import MODE_NAMES, decide
-from app.pipeline import load_policy
+from app.db import get_chat_session_generation, init_db
+from app.engine import GRADES, grade_rank
+
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB_DIST_DIR = ROOT / "app" / "web" / "dist"
 
 load_dotenv()
 
-app = FastAPI(title="DataKeeper 접근제어 챗")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Initialize an empty DB or reject a legacy/unsupported schema at startup."""
+
+    conn = store.get_conn()
+    try:
+        init_db(conn)
+    finally:
+        conn.close()
+    yield
+
+
+app = FastAPI(title="DataKeeper C/S/O", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-POLICY = load_policy()
+
+ContextQuestion = Annotated[str, Field(min_length=1, max_length=2000)]
 
 
 class SearchReq(BaseModel):
     persona_id: str
-    question: str
-    purpose: str = "info"  # "info" | "judgment"
+    question: str = Field(min_length=1)
+    context_questions: list[ContextQuestion] = Field(default_factory=list, max_length=5)
+    chat_session_generation: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class UploadReq(BaseModel):
@@ -52,11 +66,80 @@ class UploadReq(BaseModel):
     content: str
 
 
-def _persona_or_404(persona_id: str) -> dict:
-    persona = store.get_persona(persona_id)
+class ClassificationUpdateReq(BaseModel):
+    grade: Literal["O", "S", "C"]
+    reason: str = Field(min_length=1)
+    actor: str = Field(default="reviewer", min_length=1)
+
+
+class SkillUpdateReq(BaseModel):
+    enabled: bool
+
+
+def _persona_or_404(persona_id: str, conn=None) -> dict:
+    persona = store.get_persona(persona_id, conn)
     if persona is None:
-        raise HTTPException(status_code=404, detail=f"알 수 없는 페르소나: {persona_id}")
+        raise HTTPException(status_code=404, detail=f"알 수 없는 사용자: {persona_id}")
     return persona
+
+
+def _access_scope_counts(persona: dict, conn) -> tuple[int, int]:
+    """Count allowed/blocked sections without reading section source text."""
+
+    allowed_grades = GRADES[: grade_rank(persona["access_grade"]) + 1]
+    placeholders = ",".join("?" for _ in allowed_grades)
+    total = int(conn.execute("SELECT COUNT(*) FROM sections").fetchone()[0])
+    allowed = int(
+        conn.execute(
+            """SELECT COUNT(*) FROM sections
+               WHERE classification_status IN ('auto_confirmed', 'user_confirmed')
+               AND grade IN ("""
+            + placeholders
+            + ")",
+            allowed_grades,
+        ).fetchone()[0]
+    )
+    return allowed, total - allowed
+
+
+def _single_doc(sections: list[dict]) -> str | None:
+    docs = {section["doc"] for section in sections}
+    return next(iter(docs)) if len(docs) == 1 else None
+
+
+def _assert_chat_session_generation(requested: str | None, conn) -> None:
+    if requested is not None and requested != get_chat_session_generation(conn):
+        raise HTTPException(
+            status_code=409,
+            detail="채팅 세션이 초기화되었습니다. 최신 상태를 확인한 뒤 다시 질문해주세요.",
+        )
+
+
+def _record_session_access(
+    req: SearchReq,
+    persona: dict,
+    action: str,
+    sections: list[dict],
+    blocked_count: int,
+    conn,
+) -> None:
+    """Atomically reject stale sessions or append their access metadata."""
+
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        _assert_chat_session_generation(req.chat_session_generation, conn)
+        store.log_access(
+            persona["id"],
+            action,
+            [section["id"] for section in sections],
+            blocked_count,
+            doc=_single_doc(sections),
+            conn=conn,
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 
 @app.get("/api/personas")
@@ -64,22 +147,236 @@ def personas() -> list[dict]:
     return store.load_personas()
 
 
-@app.get("/api/documents")
-def documents(persona_id: str) -> list[dict]:
-    persona = _persona_or_404(persona_id)
+@app.get("/api/runtime/chat-session")
+def chat_session_state(response: Response) -> dict:
+    """Expose only the opaque generation used to invalidate local transcripts."""
+
+    response.headers["Cache-Control"] = "no-store"
     conn = store.get_conn()
     try:
-        out = []
-        for d in store.load_documents(conn):
-            modes = [decide(s, persona, POLICY).mode for s in store.sections_for_doc(d["doc"], conn)]
-            if modes and all(m == 4 for m in modes):
-                lock = "locked"
-            elif any(m > 0 for m in modes):
-                lock = "partial"
-            else:
-                lock = "open"
-            out.append({**d, "n_sections": len(modes), "lock_state": lock})
-        return out
+        return {"generation": get_chat_session_generation(conn)}
+    finally:
+        conn.close()
+
+
+@app.get("/api/classifications")
+def classifications() -> dict:
+    """Return the complete content-free classification workbench."""
+
+    conn = store.get_conn()
+    try:
+        documents = []
+        for document in store.classification_docs(conn):
+            sections = [
+                views.classification_section_view(section)
+                for section in store.sections_for_doc(document["doc"], conn)
+            ]
+            documents.append(
+                {
+                    "doc": document["doc"],
+                    "doc_title": document["doc_title"],
+                    "document_grade": document["grade"],
+                    "section_count": document["section_count"],
+                    "pending_review": document["pending_count"],
+                    "confirmed_count": document["confirmed_count"],
+                    "requires_review": document["requires_review"],
+                    "sections": sections,
+                }
+            )
+        return {"docs": documents}
+    finally:
+        conn.close()
+
+
+@app.get("/api/review-queue")
+def review_queue() -> dict:
+    sections = [
+        views.classification_section_view(section)
+        for section in store.load_sections(classification_status="pending_review")
+    ]
+    return {"count": len(sections), "sections": sections}
+
+
+@app.get("/api/review/sections/{section_id}/preview")
+def section_preview(section_id: str, response: Response) -> dict:
+    """Return one section's source text for the classification workbench."""
+
+    response.headers["Cache-Control"] = "no-store"
+    conn = store.get_conn()
+    try:
+        section = store.get_section(section_id, conn)
+        if section is None:
+            raise HTTPException(status_code=404, detail=f"섹션을 찾을 수 없습니다: {section_id}")
+        return {"section": views.classification_section_preview(section)}
+    finally:
+        conn.close()
+
+
+@app.patch("/api/sections/{section_id}/classification")
+def update_classification(section_id: str, req: ClassificationUpdateReq) -> dict:
+    try:
+        result = governance.confirm_and_learn(
+            section_id,
+            req.grade,
+            req.reason,
+            req.actor,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"섹션을 찾을 수 없습니다: {section_id}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "section": views.classification_section_view(result["section"]),
+        "skill": result["skill"],
+        "skill_action": result["skill_action"],
+    }
+
+
+@app.get("/api/skills")
+def skills() -> dict:
+    items = store.load_skills()
+    return {"count": len(items), "skills": items}
+
+
+@app.patch("/api/skills/{skill_id}")
+def update_skill(skill_id: int, req: SkillUpdateReq) -> dict:
+    try:
+        return store.update_skill(skill_id, enabled=req.enabled)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Skill을 찾을 수 없습니다: {skill_id}") from exc
+
+
+@app.get("/api/logs/classification")
+def classification_logs(limit: int = Query(default=100, ge=1, le=1000)) -> dict:
+    logs = store.load_classification_logs(limit=limit)
+    return {"count": len(logs), "logs": logs}
+
+
+@app.get("/api/logs/access")
+def access_logs(limit: int = Query(default=100, ge=1, le=1000)) -> dict:
+    logs = store.load_access_logs(limit=limit)
+    return {"count": len(logs), "logs": logs}
+
+
+@app.get("/api/documents")
+def documents(persona_id: str) -> list[dict]:
+    """Return only documents with at least one section visible to the user."""
+
+    conn = store.get_conn()
+    try:
+        persona = _persona_or_404(persona_id, conn)
+        output = []
+        for document in store.load_documents(conn):
+            visible = store.load_accessible_sections(persona, conn, doc=document["doc"])
+            if not visible:
+                continue
+            visible_grade = max(
+                (section["grade"] for section in visible),
+                key=grade_rank,
+            )
+            output.append(
+                {
+                    "doc": document["doc"],
+                    "doc_title": document["doc_title"],
+                    "visible_grade": visible_grade,
+                    "visible_section_count": len(visible),
+                }
+            )
+        return output
+    finally:
+        conn.close()
+
+
+@app.get("/api/sections")
+def sections(persona_id: str) -> dict:
+    """Return authorized section content only; denied metadata is not included."""
+
+    conn = store.get_conn()
+    try:
+        persona = _persona_or_404(persona_id, conn)
+        allowed = store.load_accessible_sections(persona, conn)
+        documents: dict[str, dict] = {}
+        for section in allowed:
+            document = documents.setdefault(
+                section["doc"],
+                {
+                    "doc": section["doc"],
+                    "doc_title": section["doc_title"],
+                    "sections": [],
+                },
+            )
+            view = views.accessible_section_view(section, persona)
+            if view is not None:
+                document["sections"].append(view)
+        store.log_access(
+            persona["id"],
+            "browse",
+            [section["id"] for section in allowed],
+            _access_scope_counts(persona, conn)[1],
+            conn=conn,
+        )
+        conn.commit()
+        return {"persona": persona, "docs": list(documents.values())}
+    finally:
+        conn.close()
+
+
+@app.post("/api/search")
+def search(req: SearchReq) -> dict:
+    conn = store.get_conn()
+    try:
+        persona = _persona_or_404(req.persona_id, conn)
+        _assert_chat_session_generation(req.chat_session_generation, conn)
+        results = retrieval.search(
+            req.question,
+            persona,
+            conn,
+            context_questions=req.context_questions,
+        )
+        blocked_count = _access_scope_counts(persona, conn)[1]
+        _record_session_access(req, persona, "search", results, blocked_count, conn)
+        return {"persona": persona, "query": req.question, "results": results}
+    finally:
+        conn.close()
+
+
+@app.post("/api/chat")
+def chat(req: SearchReq) -> dict:
+    if not has_llm_credentials():
+        provider = llm_provider()
+        key_name = (
+            "GEMINI_API_KEY 또는 GOOGLE_API_KEY"
+            if provider == "gemini"
+            else "ANTHROPIC_API_KEY"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=f"{key_name}가 없어 LLM 답변 모드를 사용할 수 없습니다.",
+        )
+
+    conn = store.get_conn()
+    try:
+        persona = _persona_or_404(req.persona_id, conn)
+        _assert_chat_session_generation(req.chat_session_generation, conn)
+        try:
+            result = pipeline.answer(
+                req.question,
+                persona,
+                conn=conn,
+                context_questions=req.context_questions,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=f"LLM 답변 생성 실패: {exc}") from exc
+        blocked_count = _access_scope_counts(persona, conn)[1]
+        _record_session_access(
+            req, persona, "chat", result.used_sections, blocked_count, conn
+        )
+        return {
+            "answer": result.answer,
+            "used_sections": result.used_sections,
+            "persona": result.persona,
+            "query": result.question,
+        }
     finally:
         conn.close()
 
@@ -90,14 +387,13 @@ def upload_document(req: UploadReq) -> dict:
     if not filename.lower().endswith((".txt", ".md")):
         raise HTTPException(status_code=400, detail=".txt 또는 .md 파일만 업로드할 수 있습니다.")
     try:
-        result = upload_pipeline.classify_and_store(filename, req.content)
+        return upload_pipeline.classify_and_store(filename, req.content)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"문서 분류 파이프라인 실패: {exc}") from exc
-    return result
 
 
 @app.delete("/api/documents/{doc}")
@@ -108,88 +404,6 @@ def delete_document(doc: str) -> dict:
     return {"deleted": deleted["doc"], "doc_title": deleted["doc_title"]}
 
 
-@app.post("/api/search")
-def search(req: SearchReq) -> dict:
-    persona = _persona_or_404(req.persona_id)
-    purpose = req.purpose if req.purpose in ("info", "judgment") else "info"
-    results = retrieval.search(req.question, persona, POLICY, purpose)
-    return {"persona": persona, "purpose": purpose, "query": req.question, "results": results}
-
-
-@app.get("/api/sections")
-def sections(persona_id: str) -> dict:
-    """전 문서·전 섹션을 현재 페르소나 기준 판정한 뷰 (그리드·문서 뷰어용).
-
-    시각화 목적이므로 A4(차단) 섹션도 잠금 상태로 포함한다. (실제 질의 경로인
-    /api/search·/api/chat 은 A4를 완전히 제외한다.)
-    """
-    persona = _persona_or_404(persona_id)
-    conn = store.get_conn()
-    try:
-        docs = []
-        for d in store.load_documents(conn):
-            secs = store.sections_for_doc(d["doc"], conn)
-            depts = sorted({dep for s in secs for dep in s.get("departments", [])})
-            docs.append({
-                "doc": d["doc"],
-                "doc_title": d["doc_title"],
-                "dept_label": ", ".join(depts) if depts else "전사 공개",
-                "sections": [views.section_view(s, decide(s, persona, POLICY)) for s in secs],
-            })
-        return {"persona": persona, "docs": docs}
-    finally:
-        conn.close()
-
-
-@app.get("/api/matrix")
-def matrix() -> dict:
-    """전 섹션 × 전 페르소나 판정 히트맵."""
-    personas = store.load_personas()
-    conn = store.get_conn()
-    try:
-        rows = []
-        for d in store.load_documents(conn):
-            for s in store.sections_for_doc(d["doc"], conn):
-                cells = []
-                for p in personas:
-                    dec = decide(s, p, POLICY)
-                    cells.append({
-                        "persona_id": p["id"], "mode": dec.mode,
-                        "mode_name": MODE_NAMES[dec.mode], "reason": " · ".join(dec.reasons),
-                    })
-                rows.append({
-                    "id": s["id"], "doc": d["doc"], "doc_title": d["doc_title"], "title": s["title"],
-                    "d": s["security_level"], "cells": cells,
-                })
-        return {"personas": personas, "rows": rows}
-    finally:
-        conn.close()
-
-
-@app.post("/api/chat")
-def chat(req: SearchReq) -> dict:
-    if not has_llm_credentials():
-        provider = llm_provider()
-        key_name = "GEMINI_API_KEY 또는 GOOGLE_API_KEY" if provider == "gemini" else "ANTHROPIC_API_KEY"
-        raise HTTPException(status_code=503, detail=f"{key_name}가 없어 LLM 답변 모드를 사용할 수 없습니다.")
-
-    persona = _persona_or_404(req.persona_id)
-    purpose = req.purpose if req.purpose in ("info", "judgment") else "info"
-    try:
-        result = pipeline.answer(req.question, persona, purpose, policy=POLICY)
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"LLM 답변 생성 실패: {exc}") from exc
-
-    return {
-        "answer": result.answer,
-        "used_sections": result.used_sections,
-        "guard": pipeline.guard_to_dict(result.guard),
-        "persona": result.persona,
-        "purpose": result.purpose,
-        "query": result.question,
-    }
-
-
-# 정적 프론트 서빙 (app/web/dist). API 라우트 뒤에 마운트해야 /api/* 가 우선한다.
+# API routes must be registered before the static single-page application.
 if WEB_DIST_DIR.exists():
     app.mount("/", StaticFiles(directory=str(WEB_DIST_DIR), html=True), name="web")

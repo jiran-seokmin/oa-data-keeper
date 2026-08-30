@@ -51,10 +51,29 @@ def llm_model() -> str:
     return "claude-opus-4-8"
 
 
+def classification_model() -> str:
+    """Return the Gemini model used for document classification.
+
+    Chat may use Anthropic, but uploads are always classified by Gemini. When
+    Gemini is also the chat provider, ACE_MODEL remains the shared override.
+    """
+
+    configured = os.environ.get("GEMINI_CLASSIFICATION_MODEL")
+    if configured:
+        return configured
+    if llm_provider() == "gemini" and os.environ.get("ACE_MODEL"):
+        return os.environ["ACE_MODEL"]
+    return "gemini-2.5-flash"
+
+
+def has_gemini_credentials() -> bool:
+    return bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+
+
 def has_llm_credentials() -> bool:
     provider = llm_provider()
     if provider == "gemini":
-        return bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+        return has_gemini_credentials()
     if provider == "anthropic":
         return bool(os.environ.get("ANTHROPIC_API_KEY"))
     return False

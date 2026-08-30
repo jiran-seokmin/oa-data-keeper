@@ -1,17 +1,11 @@
-"""DataKeeper 데모 UI — 페르소나별 문서 렌더링 시각화.
+"""Streamlit review console for the DataKeeper C/S/O MVP.
 
-MVP 초점: 입력 데이터를 보안 등급으로 분류하고, 페르소나에 따라 접근이
-제어되는 것을 시각적으로 보여준다 (CONCEPT.md 6장). 실시간 질의응답은
-Phase 2이며 마지막 탭에 보너스로만 존재한다.
-
-실행: streamlit run app/ui.py  (뷰어·매트릭스는 API 키 불필요)
+Run with: ``streamlit run app/ui.py``
 """
 
 from __future__ import annotations
 
-import html
 import sys
-from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -19,359 +13,143 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pandas as pd
 import streamlit as st
 
-from app.engine import MODE_NAMES, Decision, decide
-from app.pipeline import load_personas, load_policy, load_sections
-
-st.set_page_config(page_title="DataKeeper — 접근 제어 엔진 데모", page_icon="🔐", layout="wide")
-
-MODE_BADGES = {0: "✅", 1: "🧠", 2: "🔍", 3: "🎭", 4: "🚫"}
-MODE_COLORS = {0: "#d3f1e0", 1: "#e6dcf7", 2: "#fff3bf", 3: "#fde2cd", 4: "#f1f3f4"}
-MODE_TEXT = {0: "#0b6e4f", 1: "#5b3fa8", 2: "#8a6d00", 3: "#a4540a", 4: "#5f6368"}
-MODE_ACTIONS = {
-    0: "원문 전체 표시",
-    1: "직접 열람 불가 · AI 추론 근거",
-    2: "일반화 요약만 표시",
-    3: "엔티티 마스킹본 표시",
-    4: "접근 차단",
-}
-LEVEL_COLORS = {0: "#2a9d8f", 1: "#6c9a3f", 2: "#e9a03b", 3: "#d1495b", 4: "#7b2d43"}
-
-st.markdown(
-    """
-    <style>
-      .block-container { padding-top: 2rem; }
-      .dk-mode-strip {
-        display: grid;
-        grid-template-columns: repeat(5, minmax(130px, 1fr));
-        gap: 8px;
-        margin: 10px 0 18px;
-      }
-      .dk-mode-item {
-        border-radius: 8px;
-        padding: 8px 10px;
-        min-height: 58px;
-        border: 1px solid rgba(0,0,0,0.06);
-      }
-      .dk-mode-name { font-weight: 800; font-size: 0.84rem; margin-bottom: 3px; }
-      .dk-mode-action { font-size: 0.76rem; line-height: 1.25; }
-      .dk-section-meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        align-items: center;
-        margin-bottom: 4px;
-      }
-      .dk-reason {
-        color: #667085;
-        font-size: 0.82rem;
-        line-height: 1.35;
-        margin-bottom: 10px;
-      }
-      .dk-muted-panel {
-        color: #6b7280;
-        background: #f8fafc;
-        border: 1px solid #e5e7eb;
-        border-radius: 8px;
-        padding: 10px 12px;
-      }
-      @media (max-width: 900px) {
-        .dk-mode-strip { grid-template-columns: 1fr; }
-      }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+from app import governance, store
 
 
-@st.cache_data
-def _sections():
-    return load_sections()
+st.set_page_config(page_title="DataKeeper C/S/O", page_icon="🛡️", layout="wide")
+st.title("DataKeeper")
+st.caption("C/S/O 자동 분류 · 사용자 검수 · 확정 등급 기반 접근")
 
 
-@st.cache_data
-def _policy():
-    return load_policy()
+def _grade_label(grade: str | None) -> str:
+    return {
+        "O": "O · Open 공개",
+        "S": "S · Sensitive 민감",
+        "C": "C · Classified 기밀",
+    }.get(grade, "미분류")
 
 
-@st.cache_data
-def _personas():
-    return load_personas()
+def _status_label(status: str) -> str:
+    return {
+        "auto_confirmed": "자동 확정",
+        "pending_review": "검수 대기",
+        "user_confirmed": "사용자 확정",
+    }.get(status, status)
 
 
-def esc(text: str) -> str:
-    return html.escape(text).replace("\n", "<br>")
+def classification_tab() -> None:
+    sections = store.load_sections()
+    pending = sum(section["classification_status"] == "pending_review" for section in sections)
+    documents = store.load_documents()
+    cols = st.columns(3)
+    cols[0].metric("문서", len(documents))
+    cols[1].metric("섹션", len(sections))
+    cols[2].metric("검수 대기", pending)
 
-
-def level_badge(level: int) -> str:
-    return (
-        f'<span style="background:{LEVEL_COLORS[level]};color:#fff;border-radius:10px;'
-        f'padding:1px 10px;font-size:0.78rem;font-weight:700">D{level}</span>'
-    )
-
-
-def mode_badge(d: Decision) -> str:
-    return (
-        f'<span style="background:{MODE_COLORS[d.mode]};color:{MODE_TEXT[d.mode]};border-radius:10px;'
-        f'padding:1px 10px;font-size:0.78rem;font-weight:700">{MODE_BADGES[d.mode]} {MODE_NAMES[d.mode]}</span>'
-    )
-
-
-def render_mode_legend() -> None:
-    items = []
-    for mode in range(5):
-        items.append(
-            f'<div class="dk-mode-item" style="background:{MODE_COLORS[mode]};color:{MODE_TEXT[mode]}">'
-            f'<div class="dk-mode-name">{MODE_BADGES[mode]} {MODE_NAMES[mode]}</div>'
-            f'<div class="dk-mode-action">{MODE_ACTIONS[mode]}</div>'
-            "</div>"
-        )
-    st.markdown('<div class="dk-mode-strip">' + "".join(items) + "</div>", unsafe_allow_html=True)
-
-
-def masked_html(section: dict) -> str:
-    """A3: 엔티티를 하이라이트된 플레이스홀더로 치환한 본문 HTML."""
-    text = section["text"]
-    for e in sorted(section.get("entities", []), key=lambda e: len(e["text"]), reverse=True):
-        text = text.replace(e["text"], f"\x00{e['placeholder']}\x01")
-    text = esc(text)
-    text = text.replace("\x00", '<mark style="background:#ffd166;border-radius:4px;padding:0 5px;font-weight:600">')
-    text = text.replace("\x01", "</mark>")
-    return text
-
-
-def render_section(section: dict, d: Decision) -> None:
-    """CONCEPT.md 6.1절 렌더링 규칙의 구현."""
-    with st.container(border=True):
-        st.markdown(
-            '<div class="dk-section-meta">'
-            f'{level_badge(d.security_level)}'
-            f'{mode_badge(d)}'
-            f'<b>{esc(section["title"])}</b>'
-            "</div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            f'<div class="dk-reason">gap={d.gap} · {" / ".join(esc(reason) for reason in d.reasons)}</div>',
-            unsafe_allow_html=True,
-        )
-
-        if d.mode == 4:
-            st.markdown(
-                '<div class="dk-muted-panel">접근 차단: 이 섹션은 현재 사용자에게 제공되지 않습니다.</div>',
-                unsafe_allow_html=True,
-            )
-        elif d.mode == 1:
-            st.markdown(
-                '<div style="color:#5b3fa8;font-size:0.85rem;margin-bottom:4px">'
-                "AI 추론 근거로만 사용 가능 — 직접 열람 불가 (Phase 2 질의응답에서 판단·집계에만 활용)</div>"
-                f'<div style="filter:blur(5px);user-select:none;pointer-events:none;line-height:1.7">{esc(section["text"])}</div>',
-                unsafe_allow_html=True,
-            )
-        elif d.mode == 2:
-            st.markdown(
-                '<div style="background:#fffbe8;border-left:4px solid #e9c46a;border-radius:6px;padding:10px 14px;line-height:1.7">'
-                f'<b>일반화 요약</b> · 원문은 접근 등급이 부족해 요약으로 대체되었습니다<br>{esc(section["summary_generalized"])}</div>',
-                unsafe_allow_html=True,
-            )
-        elif d.mode == 3:
-            st.markdown(
-                f'<div style="line-height:1.7">{masked_html(section)}</div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(f'<div style="line-height:1.7">{esc(section["text"])}</div>', unsafe_allow_html=True)
-
-
-def doc_list(sections: list[dict]) -> list[tuple[str, str]]:
-    seen: dict[str, str] = {}
-    for s in sections:
-        seen.setdefault(s["doc"], s["doc_title"])
-    return list(seen.items())
-
-
-def _mode_counts(decisions: list[Decision]) -> list[tuple[int, int]]:
-    counts: dict[int, int] = {}
-    for d in decisions:
-        counts[d.mode] = counts.get(d.mode, 0) + 1
-    return sorted(counts.items())
-
-
-def log_view(persona: dict, doc_title: str, decisions: list[Decision]) -> None:
-    st.session_state.setdefault("audit", [])
-    entry = {
-        "시각": datetime.now().strftime("%H:%M:%S"),
-        "사용자": f"{persona['name']} (C{persona['clearance']})",
-        "문서": doc_title,
-        "판정": " · ".join(f"A{m}×{n}" for m, n in _mode_counts(decisions)),
-    }
-    audit = st.session_state["audit"]
-    if not audit or (audit[-1]["사용자"], audit[-1]["문서"]) != (entry["사용자"], entry["문서"]):
-        audit.append(entry)
-
-
-# ── 탭 구현 ──────────────────────────────────────────────────────────────
-
-
-def tab_viewer(sections, policy, persona, purpose):
-    docs = doc_list(sections)
-    by_doc = {doc: [s for s in sections if s["doc"] == doc] for doc, _ in docs}
-
-    def label(item):
-        doc, title = item
-        modes = [decide(s, persona, policy, purpose).mode for s in by_doc[doc]]
-        if all(m == 4 for m in modes):
-            return f"🔒 {title}"
-        if any(m > 0 for m in modes):
-            return f"🔐 {title}"
-        return f"📄 {title}"
-
-    selected = st.selectbox("문서 선택", docs, format_func=label, index=0)
-    doc, doc_title = selected
-
-    decisions = [decide(s, persona, policy, purpose) for s in by_doc[doc]]
-    log_view(persona, doc_title, decisions)
-
-    st.markdown(f"### {doc_title}")
-    st.caption("A0이 전체 접근이고 A4가 접근 차단입니다. 사이드바에서 페르소나를 바꾸면 같은 문서의 노출 방식이 즉시 달라집니다.")
-    render_mode_legend()
-
-    counts = dict(_mode_counts(decisions))
-    metric_cols = st.columns(5)
-    for mode, col in enumerate(metric_cols):
-        col.metric(f"A{mode}", counts.get(mode, 0), MODE_ACTIONS[mode])
-
-    st.markdown(
-        f"**현재 사용자**: {persona['name']} · C{persona['clearance']} · "
-        f"{persona.get('department') or '외부 채널'} · 목적: {'판단/집계' if purpose == 'judgment' else '정보 조회'}"
-    )
-    for s, d in zip(by_doc[doc], decisions):
-        render_section(s, d)
-
-
-def tab_matrix(sections, personas, policy, purpose):
-    st.caption("섹션 × 페르소나 전체 판정을 한 화면에 표시합니다. A0은 전체 접근, A4는 접근 차단입니다.")
-    render_mode_legend()
-
-    rows = []
-    for s in sections:
-        row = {"문서": s["doc_title"], "섹션": s["title"], "D": f"D{s['security_level']}"}
-        for p in personas:
-            row[p["name"]] = f"A{decide(s, p, policy, purpose).mode}"
-        rows.append(row)
-    df = pd.DataFrame(rows)
-
-    persona_cols = [p["name"] for p in personas]
-
-    def color(v):
-        if isinstance(v, str) and v.startswith("A") and v[1:].isdigit():
-            m = int(v[1:])
-            return f"background-color:{MODE_COLORS[m]};color:{MODE_TEXT[m]};font-weight:600"
-        return ""
-
-    styler = df.style
-    styler = styler.map(color, subset=persona_cols) if hasattr(styler, "map") else styler.applymap(color, subset=persona_cols)
-    st.dataframe(styler, width="stretch", hide_index=True, height=min(38 * len(df) + 40, 900))
-
-
-def tab_ingest(sections):
-    st.caption("수집 파이프라인 산출물 — 문서가 섹션으로 분리되고, 섹션마다 D등급·키워드·엔티티·A2용 요약이 부여된다.")
-    rows = []
-    for s in sections:
-        rows.append({
-            "섹션 ID": s["id"],
-            "문서": s["doc_title"],
-            "섹션": s["title"],
-            "D등급": f"D{s['security_level']}",
-            "신뢰도": s.get("confidence", 0),
-            "검수": "⚠️" if s.get("needs_review") else "",
-            "키워드": ", ".join(s.get("keywords", [])),
-            "담당 부서": ", ".join(s.get("departments", [])),
-            "엔티티": len(s.get("entities", [])),
-            "A2 일반화 요약": s.get("summary_generalized", ""),
-        })
+    rows = [
+        {
+            "섹션 ID": section["id"],
+            "문서": section["doc_title"],
+            "섹션": section["title"],
+            "등급": section["grade"] or "-",
+            "신뢰도": section["confidence"],
+            "상태": _status_label(section["classification_status"]),
+            "분류 근거": section["classification_reason"],
+        }
+        for section in sections
+    ]
     st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    if not sections:
+        st.info("분류된 섹션이 없습니다.")
+        return
 
-    sid = st.selectbox("엔티티 상세 보기", [s["id"] for s in sections if s.get("entities")])
-    sec = next(s for s in sections if s["id"] == sid)
-    st.dataframe(pd.DataFrame(sec["entities"]), hide_index=True)
-
-
-def tab_audit():
-    if st.session_state.get("audit"):
-        st.dataframe(pd.DataFrame(st.session_state["audit"]), width="stretch", hide_index=True)
-    else:
-        st.info("아직 열람 기록이 없습니다. 문서 뷰어에서 문서를 열어보세요.")
-
-
-def tab_chat(sections, policy, persona, purpose):
-    st.caption(
-        "Phase 2 미리보기 — 판정 엔진의 출력을 LLM 컨텍스트 조립에 적용한 실시간 질의응답. "
-        "`ANTHROPIC_API_KEY` 필요 (MVP 데모의 필수 경로 아님)."
+    st.subheader("등급 검수 및 수정")
+    selected_id = st.selectbox(
+        "섹션",
+        [section["id"] for section in sections],
+        format_func=lambda section_id: next(
+            f"{section['doc_title']} › {section['title']} ({_grade_label(section['grade'])})"
+            for section in sections
+            if section["id"] == section_id
+        ),
     )
-    question = st.text_input("질문", placeholder="예: 현재 논의 중인 고객사들은 어디가 있나요?")
-    if st.button("질문하기", type="primary", disabled=not question):
-        from app.pipeline import answer
+    section = next(item for item in sections if item["id"] == selected_id)
+    st.text_area("원문", section["text"], height=180, disabled=True)
+    if section["summary"]:
+        st.caption(f"요약: {section['summary']}")
+
+    with st.form("classification-review"):
+        grade = st.selectbox(
+            "확정 등급",
+            ["O", "S", "C"],
+            index=["O", "S", "C"].index(section["grade"] or "C"),
+            format_func=_grade_label,
+        )
+        reason = st.text_input("판단 근거", value=section["classification_reason"])
+        actor = st.text_input("검수자", value="reviewer")
+        submitted = st.form_submit_button("등급 확정 및 Skill 반영", type="primary")
+    if submitted:
         try:
-            with st.spinner(f"{persona['name']}(C{persona['clearance']}) 관점에서 생성 중…"):
-                result = answer(question, persona, purpose, sections, policy)
-            st.markdown(result.answer)
-            if result.guard.triggered:
-                if result.guard.blocked:
-                    st.error(f"🛡️ 출력 가드가 답변을 차단했습니다. 감지된 유출: {', '.join(result.guard.leaked)}")
-                else:
-                    st.warning(f"🛡️ 출력 가드가 유출을 감지해 재생성했습니다. (1차 유출: {', '.join(result.guard.leaked)})")
-        except Exception as e:
-            st.error(f"답변 생성 실패: {e}\n\n`ANTHROPIC_API_KEY` 환경 변수를 확인하세요.")
+            result = governance.confirm_and_learn(selected_id, grade, reason, actor)
+        except (KeyError, ValueError) as exc:
+            st.error(str(exc))
+        else:
+            st.success(
+                f"{_grade_label(result['section']['grade'])}로 확정하고 "
+                f"분류 Skill을 {result['skill_action']} 처리했습니다."
+            )
+            st.rerun()
 
 
-def main():
-    st.title("DataKeeper — 접근 제어 엔진 데모")
-    st.caption(
-        "All Data, Safe for Everyone — 데이터 보안 등급(D) × 사용자 접근 등급(C) × 상황 → "
-        "섹션 단위 5단계 접근 모드(A) 판정. 같은 문서가 보는 사람에 따라 다르게 렌더링됩니다."
+def access_tab() -> None:
+    personas = store.load_personas()
+    if not personas:
+        st.info("등록된 사용자가 없습니다.")
+        return
+    persona_id = st.selectbox(
+        "사용자",
+        [persona["id"] for persona in personas],
+        format_func=lambda value: next(
+            f"{persona['name']} · {_grade_label(persona['access_grade'])}"
+            for persona in personas
+            if persona["id"] == value
+        ),
     )
+    persona = next(item for item in personas if item["id"] == persona_id)
+    sections = store.load_accessible_sections(persona)
+    st.caption("확정 상태이며 사용자 등급 이하인 원문만 조회됩니다. 미확정·상위 등급은 기본 차단됩니다.")
+    if not sections:
+        st.warning("이 사용자가 접근할 수 있는 확정 섹션이 없습니다.")
+        return
 
-    sections = _sections()
-    policy = _policy()
-    personas = _personas()
-
-    with st.sidebar:
-        st.header("사용자 (페르소나)")
-        persona = st.radio(
-            "누구로 볼까요?",
-            personas,
-            format_func=lambda p: f"{p['name']} — C{p['clearance']}"
-            + (f" · {p['department']}" if p.get("department") else " · 외부 채널"),
-        )
-        st.divider()
-        judgment = st.toggle(
-            "판단/집계 목적 (A1 완화)",
-            value=False,
-            help="판단·집계 목적의 접근이면 A2/A3 판정 섹션이 A1(AI 추론 근거 전용)로 완화됩니다. D4는 완화되지 않습니다.",
-        )
-        st.divider()
-        n_docs = len({s["doc"] for s in sections})
-        st.caption(
-            f"코퍼스: 문서 {n_docs}개 / 섹션 {len(sections)}개\n\n"
-            "현재 스펙: A0 전체 접근 → A4 접근 차단\n\n"
-            "분류는 수집 시 1회 — 뷰어·매트릭스는 API 호출 없이 동작합니다."
-        )
-
-    purpose = "judgment" if judgment else "info"
-
-    viewer, matrix, ingest, audit, chat = st.tabs(
-        ["📄 문서 뷰어", "🗺️ 판정 매트릭스", "⚙️ 수집 결과", "📋 감사 로그", "💬 질의응답 (Phase 2)"]
-    )
-    with viewer:
-        tab_viewer(sections, policy, persona, purpose)
-    with matrix:
-        tab_matrix(sections, personas, policy, purpose)
-    with ingest:
-        tab_ingest(sections)
-    with audit:
-        tab_audit()
-    with chat:
-        tab_chat(sections, policy, persona, purpose)
+    for section in sections:
+        with st.expander(
+            f"[{section['grade']}] {section['doc_title']} › {section['title']}",
+            expanded=False,
+        ):
+            st.write(section["text"])
 
 
-main()
+def logs_tab() -> None:
+    classification_logs = store.load_classification_logs(limit=200)
+    access_logs = store.load_access_logs(limit=200)
+    skills = store.load_skills()
+
+    st.subheader("분류·학습 이력")
+    st.dataframe(pd.DataFrame(classification_logs), width="stretch", hide_index=True)
+    st.subheader("접근 이력")
+    st.caption("질문·답변·원문은 기록하지 않고 식별자, 등급, 허용/차단 건수만 저장합니다.")
+    st.dataframe(pd.DataFrame(access_logs), width="stretch", hide_index=True)
+    st.subheader("활성 분류 Skill")
+    st.dataframe(pd.DataFrame(skills), width="stretch", hide_index=True)
+
+
+tab_classification, tab_access, tab_logs = st.tabs(
+    ["분류·학습", "권한 기반 조회", "판정·접근 로그"]
+)
+with tab_classification:
+    classification_tab()
+with tab_access:
+    access_tab()
+with tab_logs:
+    logs_tab()

@@ -1,27 +1,28 @@
 # 데모용 페르소나 (실서비스에서는 SSO/조직도 연동으로 대체)
+# 접근 등급: O(Open) < S(Sensitive) < C(Classified)
 personas:
   - id: external
     name: 외부 고객
-    clearance: 0
+    access_grade: O
     department: null
     channel: external
   - id: junior_dev
     name: 신입 개발자
-    clearance: 1
+    access_grade: S
     department: 개발팀
     channel: internal
   - id: sales_rep
     name: 영업팀원
-    clearance: 2
+    access_grade: S
     department: 영업팀
     channel: internal
   - id: sales_lead
     name: 영업팀장
-    clearance: 3
+    access_grade: S
     department: 영업팀
     channel: internal
   - id: ceo
     name: CEO
-    clearance: 4
+    access_grade: C
     department: 경영진
     channel: internal

@@ -1,10 +1,9 @@
-"""분류 공용 자산: 분류 프롬프트 + 엔티티 플레이스홀더 부여.
+"""Shared assets for C/S/O document classification.
 
-과거 seed 코퍼스 수집 CLI(`python -m app.ingest`)는 DB 직접 시딩(`app/seed_db.py`)으로
-대체되어 제거됐다. 이 모듈은 시딩·런타임 업로드 분류가 공유하는 자산만 남긴다:
-
-- `CLASSIFY_SYSTEM` / `KEYWORDS_PATH` — 업로드 문서 분류 프롬프트 (`app/upload_pipeline.py`)
-- `assign_placeholders` — 코퍼스 전역 엔티티 플레이스홀더 (`app/seed_db.py`, `app/upload_pipeline.py`)
+The runtime upload pipeline classifies each semantic section into the N2SF-aligned
+three-grade model. Access decisions are handled by the deterministic core after
+classification; this prompt deliberately asks only for classification
+metadata and a neutral section summary.
 """
 
 from __future__ import annotations
@@ -15,37 +14,30 @@ ROOT = Path(__file__).resolve().parent.parent
 KEYWORDS_PATH = ROOT / "app" / "keywords.yaml"
 
 
-def assign_placeholders(sections: list[dict]) -> None:
-    """엔티티에 타입별 플레이스홀더 부여. 코퍼스 전체에서 같은 엔티티는 같은 플레이스홀더."""
-    assigned: dict[tuple[str, str], str] = {}
-    counters: dict[str, int] = {}
-    for s in sections:
-        for e in s.get("entities", []):
-            key = (e["type"], e["text"])
-            if key not in assigned:
-                n = counters.get(e["type"], 0)
-                counters[e["type"]] = n + 1
-                suffix = chr(ord("A") + n) if n < 26 else str(n)
-                assigned[key] = f"[{e['type']}{suffix}]"
-            e["placeholder"] = assigned[key]
+CLASSIFY_SYSTEM = """당신은 사내 문서의 N2SF 기반 보안 등급 분류기입니다.
 
+섹션별 등급은 반드시 다음 C/S/O 중 하나입니다:
+- O (Open · 공개): 외부에 공개해도 무방한 정보
+- S (Sensitive · 민감): 조직 내부용으로 제한이 필요한 정보
+- C (Classified · 기밀): 유출 시 조직에 중대한 영향을 주는 최고 수준 정보
 
-CLASSIFY_SYSTEM = """당신은 사내 문서의 데이터 보안 등급 분류기입니다.
-
-보안 등급 기준:
-- 0 (D0 외부 정보): 공개해도 되는 정보 (보도자료, 공개 제품 소개)
-- 1 (D1 일반 정보): 사내 일반 공유 정보 (공지, 일반 회의록)
-- 2 (D2 제한 접근): 부서 업무 정보 (영업 파이프라인, 미팅 노트)
-- 3 (D3 기밀 접근): 계약 조건, 금액, 매출 등 기밀
-- 4 (D4 최고 접근): M&A, 인사 평가, 미공개 재무, 투자 유치
+경계가 애매하면 더 엄격한 등급을 제안하되 confidence를 낮추세요. confidence가 0.8 미만인
+결과는 시스템이 자동 확정하지 않고 사용자 검수 대상으로 차단합니다.
 
 관리자 등록 키워드 힌트:
 {hints}
 
-섹션을 분석해 다음을 반환하세요:
-- security_level: 위 기준의 등급 (경계가 애매하면 높은 쪽 — default-deny)
+사용자가 확정·수정해 활성화된 분류 Skill:
+{skills}
+
+각 섹션을 분석해 다음 필드만 반환하세요:
+- grade: O, S, C 중 하나
 - confidence: 분류 확신도 0~1
-- keywords: 등급 판단 근거 키워드
-- departments: 이 데이터의 담당 부서 목록 (영업팀/개발팀/재무팀/인사팀/경영진 중)
-- summary_generalized: A2(의미 제한)용 일반화 요약 한 문장 — 고유명사 제거, 수치는 규모/범위로, 조건은 카테고리로
-- entities: 마스킹 대상 엔티티 (고객사명, 인명, 금액, 민감 수치, 코드네임 등)"""
+- keywords: 등급 판단 근거 키워드 목록
+- departments: 이 데이터의 담당 부서 목록
+- summary: 원문의 의미를 보존한 중립적 한 문장 요약
+- classification_reason: 해당 등급을 선택한 구체적 근거
+- applied_skills: 실제로 적용한 활성 Skill의 name 목록. 적용하지 않았으면 빈 목록
+
+분류 외 접근용 파생 본문은 생성하지 마세요. 활성 Skill이 현재 섹션과 관련되면
+그 지침을 우선 적용하고 classification_reason에 적용 근거를 남기세요."""

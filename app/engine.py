@@ -1,136 +1,165 @@
-"""접근 제어 판정 엔진.
+"""Deterministic CSO grade access-control engine.
 
-A(접근 모드) = Engine(D 데이터 보안 등급, C 사용자 접근 등급, Context)
+Data and user grades share one ordered scale::
 
-판정은 반드시 결정론적 코드로만 수행한다. LLM은 이해(분류·요약·추출)에만 쓰이고,
-접근 판정 자체에는 관여하지 않는다 — 감사 가능성과 인젝션 내성을 위한 핵심 설계 원칙.
+    O (Open) < S (Sensitive) < C (Classified)
+
+Classification and access are deliberately separate concerns. A section is
+readable only after its classification has been confirmed (automatically or by
+a user), and only when the user's access grade is at least the section grade.
+Missing or malformed security metadata always fails closed.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
+from typing import Any
 
-import yaml
 
-MODE_NAMES = {
-    0: "A0 전체 접근",
-    1: "A1 노출 제한",
-    2: "A2 의미 제한",
-    3: "A3 정보 마스킹",
-    4: "A4 접근 차단",
+GRADES = ("O", "S", "C")
+GRADE_NAMES = {
+    "O": "Open",
+    "S": "Sensitive",
+    "C": "Classified · 기밀",
 }
+GRADE_RANKS = {grade: rank for rank, grade in enumerate(GRADES)}
 
-LEVEL_NAMES = {
-    0: "D0 외부 정보",
-    1: "D1 일반 정보",
-    2: "D2 제한 접근",
-    3: "D3 기밀 접근",
-    4: "D4 최고 접근",
-}
+CONFIRMED_CLASSIFICATION_STATUSES = frozenset({"auto_confirmed", "user_confirmed"})
+CLASSIFICATION_STATUSES = CONFIRMED_CLASSIFICATION_STATUSES | {"pending_review"}
 
 
-@dataclass
+def normalize_grade(grade: object) -> str:
+    """Return a canonical CSO grade or raise ``ValueError``.
+
+    Runtime access decisions use :func:`_safe_grade` instead so bad metadata is
+    denied rather than surfacing an exception. Write paths should call this
+    strict helper before persisting data.
+    """
+
+    if not isinstance(grade, str):
+        raise ValueError(f"grade must be one of {GRADES}: {grade!r}")
+    normalized = grade.strip().upper()
+    if normalized not in GRADE_RANKS:
+        raise ValueError(f"grade must be one of {GRADES}: {grade!r}")
+    return normalized
+
+
+def _safe_grade(grade: object) -> str | None:
+    try:
+        return normalize_grade(grade)
+    except ValueError:
+        return None
+
+
+def grade_rank(grade: object) -> int:
+    """Return the rank of ``O``, ``S`` or ``C`` (0, 1 or 2)."""
+
+    return GRADE_RANKS[normalize_grade(grade)]
+
+
+def grade_from_legacy(value: object) -> str | None:
+    """Map a legacy D/C numeric level to the CSO scale.
+
+    Both legacy section grades (``D0`` ... ``D4``) and clearances
+    (``C0`` ... ``C4``) use the same migration mapping:
+
+    - 0 -> O
+    - 1, 2, 3 -> S
+    - 4 -> C
+
+    Existing CSO strings pass through. ``None`` stays unclassified. Invalid
+    values raise ``ValueError`` so migration cannot silently weaken access.
+    """
+
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip().upper()
+        if stripped in GRADE_RANKS:
+            return stripped
+        if len(stripped) == 2 and stripped[0] in {"D", "C"} and stripped[1].isdigit():
+            value = int(stripped[1])
+        elif stripped.isdigit():
+            value = int(stripped)
+        else:
+            raise ValueError(f"unsupported legacy grade: {value!r}")
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 4:
+        raise ValueError(f"unsupported legacy grade: {value!r}")
+    if value == 0:
+        return "O"
+    if value == 4:
+        return "C"
+    return "S"
+
+
+def document_grade(sections: Iterable[Mapping[str, Any] | str | None]) -> str | None:
+    """Derive a document's grade as the maximum grade of its sections.
+
+    Documents never persist their own grade. Unclassified sections are ignored
+    for the aggregate (their own access still defaults to denied). Invalid
+    non-null grades raise instead of producing a potentially weaker result.
+    """
+
+    highest: str | None = None
+    for section in sections:
+        raw_grade = section.get("grade") if isinstance(section, Mapping) else section
+        if raw_grade is None:
+            continue
+        grade = normalize_grade(raw_grade)
+        if highest is None or grade_rank(grade) > grade_rank(highest):
+            highest = grade
+    return highest
+
+
+@dataclass(frozen=True)
 class Decision:
-    mode: int
-    base_mode: int
-    security_level: int
-    clearance: int
-    gap: int
+    """Binary access decision with audit-friendly, content-free reasons."""
+
+    allowed: bool
+    section_grade: str | None
+    user_grade: str | None
     reasons: list[str] = field(default_factory=list)
 
     @property
-    def mode_name(self) -> str:
-        return MODE_NAMES[self.mode]
+    def status(self) -> str:
+        return "allowed" if self.allowed else "denied"
 
 
-def load_yaml(path: str | Path) -> dict:
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+def decide(section: Mapping[str, Any], persona: Mapping[str, Any]) -> Decision:
+    """Decide whether ``persona`` may read ``section``.
 
-
-def base_mode_for_gap(gap: int) -> int:
-    if gap >= 0:
-        return 0
-    if gap == -1:
-        return 2
-    if gap == -2:
-        return 3
-    return 4
-
-
-def d4_mode_for_clearance(clearance: int, policy: dict | None = None) -> int:
-    """최고 접근 정보(D4)는 최신 발표 슬라이드의 별도 행을 따른다."""
-    configured = (policy or {}).get("d4_matrix", {}).get(f"C{clearance}")
-    if configured is not None:
-        return configured
-    if clearance >= 4:
-        return 0
-    if clearance == 3:
-        return 1
-    if clearance == 2:
-        return 3
-    return 4
-
-
-def decide(section: dict, persona: dict, policy: dict, purpose: str = "info") -> Decision:
-    """섹션 하나에 대한 접근 모드 판정.
-
-    purpose: "info"(정보 조회) | "judgment"(판단/집계 질의 — A1 완화 후보)
+    ``pending_review`` and missing/unknown classification states are denied.
+    Missing or malformed grades also deny access. No LLM or mutable policy is
+    involved in this decision.
     """
-    # default-deny: 등급이 없으면 최고 등급으로 간주
-    d = section.get("security_level")
-    if d is None:
-        c = persona["clearance"]
-        return Decision(4, 4, 4, c, c - 4, ["미분류 섹션: 관리자 검수 전 접근 차단 (default-deny)"])
-    c = persona["clearance"]
-    gap = c - d
-    reasons: list[str] = []
 
-    # 외부 채널 하드 캡: D0만 공개, 나머지 전면 차단
-    if persona.get("channel") == "external" and policy["external_channel"]["public_only"]:
-        if d == 0:
-            return Decision(0, 0, d, c, gap, ["외부 채널: D0 공개 정보만 전체 접근"])
-        return Decision(4, 4, d, c, gap, ["외부 채널: D0 외 전면 차단 (하드 캡)"])
+    section_grade = _safe_grade(section.get("grade"))
+    user_grade = _safe_grade(persona.get("access_grade"))
+    classification_status = section.get("classification_status")
 
-    if d == 0:
-        return Decision(0, 0, d, c, gap, ["D0 공개 정보"])
+    if classification_status not in CONFIRMED_CLASSIFICATION_STATUSES:
+        if classification_status == "pending_review":
+            reason = "분류 검토 대기: 사용자 확인 전 접근 차단 (default-deny)"
+        else:
+            reason = "분류 미확정: 확인된 분류 상태가 없어 접근 차단 (default-deny)"
+        return Decision(False, section_grade, user_grade, [reason])
 
-    if d == 4:
-        mode = d4_mode_for_clearance(c, policy)
-        reasons.append(f"D4 특칙(최신 슬라이드): C{c} × D4 → {MODE_NAMES[mode]}")
-        reasons.append("최고 접근 정보는 부서/목적 보정으로 상승하지 않음")
-        return Decision(mode, mode, d, c, gap, reasons)
+    if section_grade is None:
+        return Decision(False, None, user_grade, ["섹션 등급 누락 또는 오류: 접근 차단 (default-deny)"])
 
-    base = base_mode_for_gap(gap)
-    mode = base
-    reasons.append(f"기본 매트릭스: gap={gap} → {MODE_NAMES[base]}")
+    if user_grade is None:
+        return Decision(False, section_grade, None, ["사용자 접근 등급 누락 또는 오류: 접근 차단 (default-deny)"])
 
-    modifiers = policy.get("modifiers", {})
-
-    # 부서 관련성 보정: 담당 부서 데이터면 1단계 완화 (A4 차단에서는 부활 불가)
-    if (
-        modifiers.get("department_boost", {}).get("enabled")
-        and base <= 3
-        and persona.get("department")
-        and persona["department"] in section.get("departments", [])
-    ):
-        if mode > 0:
-            mode = max(mode - 1, 0)
-            reasons.append(f"부서 관련성(+1): {persona['department']} 담당 데이터 → {MODE_NAMES[mode]}")
-
-    # 판단/집계 질의: A2/A3 판정 섹션을 A1(노출 제한)로 완화
-    if (
-        purpose == "judgment"
-        and modifiers.get("judgment_a1", {}).get("enabled")
-        and base <= 3
-        and mode > 1
-    ):
-        mode = 1
-        reasons.append("판단/집계 질의: 추론 근거 전용(A1)으로 완화 — 내용 직접 언급 금지")
-
-    return Decision(mode, base, d, c, gap, reasons)
+    allowed = grade_rank(user_grade) >= grade_rank(section_grade)
+    if allowed:
+        reason = f"접근 허용: 사용자 {user_grade} 등급이 섹션 {section_grade} 등급 이상"
+    else:
+        reason = f"접근 차단: 사용자 {user_grade} 등급이 섹션 {section_grade} 등급보다 낮음"
+    return Decision(allowed, section_grade, user_grade, [reason])
 
 
-def decide_all(sections: list[dict], persona: dict, policy: dict, purpose: str = "info") -> list[tuple[dict, Decision]]:
-    return [(s, decide(s, persona, policy, purpose)) for s in sections]
+def decide_all(
+    sections: Iterable[Mapping[str, Any]], persona: Mapping[str, Any]
+) -> list[tuple[Mapping[str, Any], Decision]]:
+    return [(section, decide(section, persona)) for section in sections]
